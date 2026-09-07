@@ -6,8 +6,8 @@
     "description": "30 metered web tools behind one API key, sent as the X-API-Key header. Every call is priced in credits: x-credits on an operation is its base price, and a tool with a per-unit or conditional price explains it in x-credits-note and x-extra. Credits are deducted only after a call succeeds. Every error response, whatever its status, charges nothing. A successful response reports credits_used and credits_remaining. Each tool also answers GET with the self-description this document was generated from. Full reference, including each tool's response shape: https://www.crawlforge.dev/docs/api-reference",
     "termsOfService": "https://www.crawlforge.dev/terms",
     "contact": {
-      "name": "CrawlForge support",
-      "email": "support@crawlforge.dev"
+      "name": "CrawlForge",
+      "email": "simon@crawlforge.dev"
     }
   },
   "servers": [
