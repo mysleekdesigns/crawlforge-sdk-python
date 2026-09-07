@@ -1,0 +1,49 @@
+{
+  "tool": "read_result",
+  "source": "crawlforge-website src/lib/docs/content/en/api-reference/tools/read-result.ts response.example.data (dumped from a real run), recorded 2026-09-07; request is the spec's example, credits_used the operation's x-credits",
+  "request": {
+    "handle": "res_3f6f2b8e-8c1a-4a52-9f65-2d0f4a9be1c7",
+    "operation": "search",
+    "query": "Pricing",
+    "max_matches": 5
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "x-vercel-id": "iad1::abc123-1757246400000-0123456789ab"
+    },
+    "body": {
+      "success": true,
+      "data": {
+        "handle": "res_9f2c1e6a-4b7d-4c3e-8a5f-1d2e3f4a5b6c",
+        "tool": "scrape",
+        "operation": "search",
+        "view": "text",
+        "view_path": "markdown",
+        "total_chars": 182406,
+        "expires_at": "2026-09-05T15:42:10.000Z",
+        "query": "rate limits",
+        "matches": [
+          {
+            "offset": 18240,
+            "length": 11,
+            "context_offset": 18040,
+            "context": "…request. Every plan is metered per API key.\n\n## Rate limits\n\nEach key may make one request per second on the Free plan…"
+          },
+          {
+            "offset": 61377,
+            "length": 11,
+            "context_offset": 61177,
+            "context": "…returns 429 with a Retry-After header; see the rate limits table above for the per-plan ceilings…"
+          }
+        ],
+        "total_matches": 2,
+        "truncated": false
+      },
+      "credits_used": 1,
+      "credits_remaining": 998,
+      "processing_time": 42
+    }
+  }
+}

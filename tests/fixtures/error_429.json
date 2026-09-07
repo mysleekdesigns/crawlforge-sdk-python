@@ -1,0 +1,20 @@
+{
+  "source": "shapes from crawlforge-website src/lib/middleware/{validation,api-key-auth}.ts and the scrape route, 2026-09-07",
+  "response": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "2"
+    },
+    "body": {
+      "error": {
+        "code": "RATE_LIMIT_EXCEEDED",
+        "message": "Rate limit exceeded for your plan",
+        "details": {
+          "plan": "free",
+          "limit": 1
+        }
+      }
+    }
+  }
+}

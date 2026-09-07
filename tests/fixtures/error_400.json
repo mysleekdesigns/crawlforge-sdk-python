@@ -1,0 +1,22 @@
+{
+  "source": "shapes from crawlforge-website src/lib/middleware/{validation,api-key-auth}.ts and the scrape route, 2026-09-07",
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Invalid request data",
+        "details": [
+          {
+            "field": "url",
+            "message": "Required",
+            "code": "invalid_type"
+          }
+        ]
+      }
+    }
+  }
+}

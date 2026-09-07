@@ -1,0 +1,21 @@
+{
+  "source": "shapes from crawlforge-website src/lib/middleware/{validation,api-key-auth}.ts and the scrape route, 2026-09-07",
+  "response": {
+    "status": 502,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "success": false,
+      "error": {
+        "code": "BLOCKED",
+        "message": "The page is a bot-defence challenge, not the requested document"
+      },
+      "blocked": {
+        "vendor": "cloudflare",
+        "evidence": "cf-mitigated: challenge"
+      },
+      "escalated": true
+    }
+  }
+}

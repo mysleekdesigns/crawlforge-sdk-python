@@ -1,0 +1,88 @@
+{
+  "tool": "extract_metadata",
+  "source": "crawlforge-website src/lib/docs/content/en/api-reference/tools/extract-metadata.ts response.example.data (dumped from a real run), recorded 2026-09-07; request is the spec's example, credits_used the operation's x-credits",
+  "request": {
+    "url": "https://example.com",
+    "include_social": true,
+    "include_seo": true,
+    "include_technical": true,
+    "include_structured_data": true
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "x-vercel-id": "iad1::abc123-1757246400000-0123456789ab"
+    },
+    "body": {
+      "success": true,
+      "data": {
+        "metadata": {
+          "basic": {
+            "title": "Example Article - Best Practices Guide",
+            "url": "https://example.com/article",
+            "lang": "en",
+            "charset": "utf-8"
+          },
+          "seo": {
+            "description": "Learn the best practices for web development",
+            "keywords": "web development, best practices, tutorial",
+            "author": "Jane Doe",
+            "robots": "index, follow",
+            "canonical": "https://example.com/article",
+            "headings": {
+              "h1": [
+                "Best Practices Guide"
+              ],
+              "h2": [
+                "Getting Started",
+                "Common Pitfalls"
+              ],
+              "h3": []
+            },
+            "meta_refresh": null,
+            "viewport": "width=device-width, initial-scale=1"
+          },
+          "social": {
+            "open_graph": {
+              "title": "Example Article - Best Practices Guide",
+              "image": "https://example.com/og-image.jpg",
+              "type": "article",
+              "site_name": "Example Site"
+            },
+            "twitter": {
+              "card": "summary_large_image",
+              "site": "@examplesite"
+            },
+            "facebook_app_id": null,
+            "google_site_verification": null
+          },
+          "technical": {
+            "generator": "Next.js",
+            "favicons": [
+              {
+                "rel": "icon",
+                "href": "/favicon.ico",
+                "type": "image/x-icon"
+              }
+            ]
+          },
+          "structured_data": []
+        },
+        "summary": {
+          "has_title": true,
+          "has_description": true,
+          "has_open_graph": true,
+          "has_twitter_cards": true,
+          "has_structured_data": false,
+          "total_headings": 3
+        },
+        "extracted_from": "https://example.com/article",
+        "extraction_time": "2026-08-26T14:30:00.000Z"
+      },
+      "credits_used": 1,
+      "credits_remaining": 999,
+      "processing_time": 195
+    }
+  }
+}

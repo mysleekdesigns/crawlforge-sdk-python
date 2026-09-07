@@ -1,0 +1,36 @@
+{
+  "tool": "extract_text",
+  "source": "crawlforge-website src/lib/docs/content/en/api-reference/tools/extract-text.ts response.example.data (dumped from a real run), recorded 2026-09-07; request is the spec's example, credits_used the operation's x-credits",
+  "request": {
+    "url": "https://example.com",
+    "selector": "article",
+    "clean": true,
+    "preserve_links": true,
+    "max_length": 5000
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "x-vercel-id": "iad1::abc123-1757246400000-0123456789ab"
+    },
+    "body": {
+      "success": true,
+      "data": {
+        "text": "Article Title\n\nThis is the main content of the article. It contains useful information that has been extracted from the HTML.\n\nLinks:\nRelated Article (/related)",
+        "metadata": {
+          "title": "Article Title - Example Site",
+          "description": "Meta description of the article",
+          "word_count": 248,
+          "character_count": 1432,
+          "selector_used": "article",
+          "links_preserved": true,
+          "formatting_preserved": false
+        }
+      },
+      "credits_used": 1,
+      "credits_remaining": 999,
+      "processing_time": 180
+    }
+  }
+}

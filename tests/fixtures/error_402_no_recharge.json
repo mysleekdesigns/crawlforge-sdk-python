@@ -1,0 +1,22 @@
+{
+  "source": "shapes from crawlforge-website src/lib/middleware/{validation,api-key-auth}.ts and the scrape route, 2026-09-07",
+  "response": {
+    "status": 402,
+    "headers": {
+      "content-type": "application/json",
+      "x-auto-recharge-triggered": "false"
+    },
+    "body": {
+      "error": {
+        "code": "SPEND_CAP_REACHED",
+        "message": "Insufficient credits and the monthly spend cap on automatic recharges is reached",
+        "details": {
+          "required": 2,
+          "tool": "scrape",
+          "autoRechargeTriggered": false,
+          "upgradeUrl": "https://www.crawlforge.dev/pricing"
+        }
+      }
+    }
+  }
+}

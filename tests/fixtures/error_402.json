@@ -1,0 +1,22 @@
+{
+  "source": "shapes from crawlforge-website src/lib/middleware/{validation,api-key-auth}.ts and the scrape route, 2026-09-07",
+  "response": {
+    "status": 402,
+    "headers": {
+      "content-type": "application/json",
+      "x-auto-recharge-triggered": "true"
+    },
+    "body": {
+      "error": {
+        "code": "INSUFFICIENT_CREDITS",
+        "message": "Insufficient credits. Upgrade your plan or buy a one-time credit pack at https://www.crawlforge.dev/pricing",
+        "details": {
+          "required": 2,
+          "tool": "scrape",
+          "autoRechargeTriggered": true,
+          "upgradeUrl": "https://www.crawlforge.dev/pricing"
+        }
+      }
+    }
+  }
+}

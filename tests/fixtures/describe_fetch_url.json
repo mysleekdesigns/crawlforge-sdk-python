@@ -1,0 +1,72 @@
+{
+  "tool": "fetch_url",
+  "source": "derived from openapi.json (summary, x-credits, request schema, example)",
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "tool": "fetch_url",
+      "description": "Fetch content from a URL with optional headers and configuration",
+      "credits_cost": 1,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The URL to fetch"
+          },
+          "headers": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Optional HTTP headers to include"
+          },
+          "timeout": {
+            "default": 10000,
+            "type": "number",
+            "minimum": 1000,
+            "maximum": 30000,
+            "description": "Request timeout in milliseconds (1000-30000)"
+          },
+          "follow_redirects": {
+            "default": true,
+            "type": "boolean",
+            "description": "Whether to follow HTTP redirects"
+          },
+          "user_agent": {
+            "type": "string",
+            "description": "Custom User-Agent header"
+          },
+          "respect_robots": {
+            "default": true,
+            "type": "boolean"
+          },
+          "max_inline_chars": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 10000000,
+            "description": "Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit)."
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "example": {
+        "url": "https://example.com",
+        "headers": {
+          "Accept": "text/html"
+        },
+        "timeout": 15000,
+        "follow_redirects": true
+      }
+    }
+  }
+}

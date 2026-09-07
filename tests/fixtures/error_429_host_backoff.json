@@ -1,0 +1,16 @@
+{
+  "source": "shapes from crawlforge-website src/lib/middleware/{validation,api-key-auth}.ts and the scrape route, 2026-09-07",
+  "response": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "5"
+    },
+    "body": {
+      "error": {
+        "code": "HOST_BACKOFF",
+        "message": "The target host asked us to wait; try again after the Retry-After window"
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "source": "shapes from crawlforge-website src/lib/middleware/{validation,api-key-auth}.ts and the scrape route, 2026-09-07",
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "INVALID_API_KEY",
+        "message": "Invalid API key"
+      }
+    }
+  }
+}
