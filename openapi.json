@@ -4035,6 +4035,7 @@
           },
           "schema": {
             "type": "object",
+            "additionalProperties": true,
             "description": "Optional JSON schema for structured output"
           },
           "model": {
@@ -4947,6 +4948,7 @@
           },
           "schema": {
             "type": "object",
+            "additionalProperties": true,
             "description": "Optional JSON-schema for output shape (used as Ollama structured-outputs format when provider is \"ollama\")"
           },
           "provider": {
@@ -5929,6 +5931,14 @@
                 },
                 "position": {
                   "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    }
+                  },
                   "description": "click/hover: relative position { x, y }"
                 },
                 "clear": {
@@ -6076,6 +6086,9 @@
             "properties": {
               "selectors": {
                 "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
                 "description": "Key-value pairs of data to extract using CSS selectors"
               },
               "includeMetadata": {
@@ -6118,7 +6131,32 @@
                 "type": "boolean"
               },
               {
-                "type": "object"
+                "type": "object",
+                "properties": {
+                  "entities": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "replace_style": {
+                    "type": "string",
+                    "enum": [
+                      "tag",
+                      "mask",
+                      "remove"
+                    ]
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "fast",
+                      "model"
+                    ]
+                  }
+                }
               }
             ],
             "default": false,
@@ -6399,7 +6437,32 @@
                 "type": "boolean"
               },
               {
-                "type": "object"
+                "type": "object",
+                "properties": {
+                  "entities": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "replace_style": {
+                    "type": "string",
+                    "enum": [
+                      "tag",
+                      "mask",
+                      "remove"
+                    ]
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "fast",
+                      "model"
+                    ]
+                  }
+                }
               }
             ],
             "default": false,

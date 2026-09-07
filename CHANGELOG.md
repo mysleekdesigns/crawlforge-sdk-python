@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.1 (2026-09-07)
+
+- Models regenerated from the corrected OpenAPI specification. The object form
+  of `redact_pii` on `stealth_mode` and `scrape_with_actions` is now a typed
+  model (`entities`, `replace_style`, `mode`) instead of a free dict, an
+  action's `position` is `{x, y}`, and `extractionOptions.selectors` is
+  `Dict[str, str]`. A dict is still accepted wherever a model is; an unknown
+  key inside one of these objects is now rejected locally, before any request,
+  as it already was for every other request model.
+
 ## 0.1.0 (2026-09-07)
 
 Initial release.

@@ -2,7 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-FALLBACK_VERSION = "0.1.0"
+FALLBACK_VERSION = "0.1.1"
 
 try:
     __version__ = version("crawlforge")

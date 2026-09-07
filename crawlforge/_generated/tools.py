@@ -53,10 +53,12 @@ from crawlforge._generated.models import (
     ScrapeWithActionsRequestBrowserOptions,
     ScrapeWithActionsRequestExtractionOptions,
     ScrapeWithActionsRequestFormAutoFill,
+    ScrapeWithActionsRequestRedactPii,
     SearchWebRequest,
     SearchWebRequestRedactPii,
     SerpRankRequest,
     StealthModeRequest,
+    StealthModeRequestRedactPii,
     StealthModeRequestStealthConfig,
     SummarizeContentRequest,
     TrackChangesRequest,
@@ -1081,7 +1083,7 @@ class SyncToolsMixin:
         maxRetries: Optional[float] = None,
         screenshotOnError: Optional[bool] = None,
         max_inline_chars: Optional[float] = None,
-        redact_pii: Optional[Union[bool, Dict[str, Any]]] = None,
+        redact_pii: Optional[Union[bool, ScrapeWithActionsRequestRedactPii, Dict[str, Any]]] = None,
     ) -> ToolResult:
         """Interact with a page before scraping — click, type, press keys, hover, choose a select option, scroll, navigate on, run JavaScript, or wait for dynamic content. Use for SPAs, login-gated content, or multi-step flows. Set browserOptions.stealth to run the chain in a stealth browser context.
 
@@ -1192,7 +1194,7 @@ class SyncToolsMixin:
         verbose: Optional[bool] = None,
         respect_robots: Optional[bool] = None,
         max_inline_chars: Optional[float] = None,
-        redact_pii: Optional[Union[bool, Dict[str, Any]]] = None,
+        redact_pii: Optional[Union[bool, StealthModeRequestRedactPii, Dict[str, Any]]] = None,
     ) -> ToolResult:
         """Stealth browser scraping for sites that block normal scrapers (Cloudflare, DataDome, bot detection). Use operation "scrape" for a one-call render of a single URL; create_context → create_page → cleanup remains for multi-step work that reuses one context.
 
@@ -2051,7 +2053,7 @@ class AsyncToolsMixin:
         maxRetries: Optional[float] = None,
         screenshotOnError: Optional[bool] = None,
         max_inline_chars: Optional[float] = None,
-        redact_pii: Optional[Union[bool, Dict[str, Any]]] = None,
+        redact_pii: Optional[Union[bool, ScrapeWithActionsRequestRedactPii, Dict[str, Any]]] = None,
     ) -> ToolResult:
         """Interact with a page before scraping — click, type, press keys, hover, choose a select option, scroll, navigate on, run JavaScript, or wait for dynamic content. Use for SPAs, login-gated content, or multi-step flows. Set browserOptions.stealth to run the chain in a stealth browser context.
 
@@ -2162,7 +2164,7 @@ class AsyncToolsMixin:
         verbose: Optional[bool] = None,
         respect_robots: Optional[bool] = None,
         max_inline_chars: Optional[float] = None,
-        redact_pii: Optional[Union[bool, Dict[str, Any]]] = None,
+        redact_pii: Optional[Union[bool, StealthModeRequestRedactPii, Dict[str, Any]]] = None,
     ) -> ToolResult:
         """Stealth browser scraping for sites that block normal scrapers (Cloudflare, DataDome, bot detection). Use operation "scrape" for a one-call render of a single URL; create_context → create_page → cleanup remains for multi-step work that reuses one context.
 

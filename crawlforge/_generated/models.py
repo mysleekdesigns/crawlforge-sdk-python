@@ -53,15 +53,18 @@ __all__ = [
     "ScrapeRequest",
     "ScrapeStructuredRequest",
     "ScrapeTemplateRequest",
+    "ScrapeWithActionsRequestActionsItemPosition",
     "ScrapeWithActionsRequestActionsItem",
     "ScrapeWithActionsRequestFormAutoFill",
     "ScrapeWithActionsRequestBrowserOptions",
     "ScrapeWithActionsRequestExtractionOptions",
+    "ScrapeWithActionsRequestRedactPii",
     "ScrapeWithActionsRequest",
     "SearchWebRequestRedactPii",
     "SearchWebRequest",
     "SerpRankRequest",
     "StealthModeRequestStealthConfig",
+    "StealthModeRequestRedactPii",
     "StealthModeRequest",
     "SummarizeContentRequest",
     "TrackChangesRequest",
@@ -478,6 +481,12 @@ class ScrapeTemplateRequest(_RequestModel):
     timeout: Optional[int] = Field(default=15000, ge=5000, le=60000, description="Request timeout in milliseconds (5000\u201360000).")
 
 
+class ScrapeWithActionsRequestActionsItemPosition(_RequestModel):
+    """click/hover: relative position { x, y }"""
+    x: Optional[float] = Field(default=None)
+    y: Optional[float] = Field(default=None)
+
+
 class ScrapeWithActionsRequestActionsItem(_RequestModel):
     type: Optional[Literal["wait", "click", "type", "press", "scroll", "screenshot", "executeJavaScript", "select", "hover", "navigate"]] = Field(default=None, description="Action to perform")
     selector: Optional[str] = Field(default=None, description="CSS selector the action targets")
@@ -499,7 +508,7 @@ class ScrapeWithActionsRequestActionsItem(_RequestModel):
     clickCount: Optional[float] = Field(default=None, description="click: number of clicks (1-3)")
     delay: Optional[float] = Field(default=None, description="click/type: delay in ms (0-1000)")
     force: Optional[bool] = Field(default=None, description="click/hover: bypass actionability checks")
-    position: Optional[Dict[str, Any]] = Field(default=None, description="click/hover: relative position { x, y }")
+    position: Optional[ScrapeWithActionsRequestActionsItemPosition] = Field(default=None, description="click/hover: relative position { x, y }")
     clear: Optional[bool] = Field(default=None, description="type: clear field before typing")
     modifiers: Optional[List[Any]] = Field(default=None, description="press: modifier keys (Alt, Control, Meta, Shift)")
     direction: Optional[Literal["up", "down", "left", "right"]] = Field(default=None, description="scroll: direction")
@@ -534,10 +543,16 @@ class ScrapeWithActionsRequestBrowserOptions(_RequestModel):
 
 class ScrapeWithActionsRequestExtractionOptions(_RequestModel):
     """Content extraction options"""
-    selectors: Optional[Dict[str, Any]] = Field(default=None, description="Key-value pairs of data to extract using CSS selectors")
+    selectors: Optional[Dict[str, str]] = Field(default=None, description="Key-value pairs of data to extract using CSS selectors")
     includeMetadata: Optional[bool] = Field(default=True)
     includeLinks: Optional[bool] = Field(default=True)
     includeImages: Optional[bool] = Field(default=True)
+
+
+class ScrapeWithActionsRequestRedactPii(_RequestModel):
+    entities: Optional[List[str]] = Field(default=None, max_length=16)
+    replace_style: Optional[Literal["tag", "mask", "remove"]] = Field(default=None)
+    mode: Optional[Literal["fast", "model"]] = Field(default=None)
 
 
 class ScrapeWithActionsRequest(_RequestModel):
@@ -554,7 +569,7 @@ class ScrapeWithActionsRequest(_RequestModel):
     maxRetries: Optional[float] = Field(default=1, description="Maximum retry attempts on failure (0-3)")
     screenshotOnError: Optional[bool] = Field(default=True, description="Capture screenshot when an error occurs")
     max_inline_chars: Optional[float] = Field(default=40000, description="Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit).")
-    redact_pii: Optional[Union[bool, Dict[str, Any]]] = Field(default=False, description="Remove personal data from the text this call returns, before it is stored or sent back. true is shorthand for { mode: \"fast\" }: every entity, tagged. As an object: entities (any of EMAIL, PHONE, FINANCIAL, SECRET; omitted or empty means all four, and any other name is a 400 rather than a silent no-op), replace_style (\"tag\" \u2192 <EMAIL>, \"mask\" \u2192 [REDACTED], \"remove\" \u2192 nothing; default \"tag\") and mode (\"fast\", the default, is regex-only and costs no extra credits; \"model\" covers PERSON and LOCATION, needs an LLM and is rejected here \u2014 use the CrawlForge MCP server). The response carries redaction: { entities, count, mode } inside data, saying what was removed. Detection is deliberately conservative: a card number must pass Luhn and an IBAN mod-97, so a false positive cannot silently destroy real page content. URLs, queries and identifiers the response uses to name what was fetched are left intact, and counters derived from the text (content_length, word_count, character_count) describe the text as it was extracted, before redaction.")
+    redact_pii: Optional[Union[bool, ScrapeWithActionsRequestRedactPii]] = Field(default=False, description="Remove personal data from the text this call returns, before it is stored or sent back. true is shorthand for { mode: \"fast\" }: every entity, tagged. As an object: entities (any of EMAIL, PHONE, FINANCIAL, SECRET; omitted or empty means all four, and any other name is a 400 rather than a silent no-op), replace_style (\"tag\" \u2192 <EMAIL>, \"mask\" \u2192 [REDACTED], \"remove\" \u2192 nothing; default \"tag\") and mode (\"fast\", the default, is regex-only and costs no extra credits; \"model\" covers PERSON and LOCATION, needs an LLM and is rejected here \u2014 use the CrawlForge MCP server). The response carries redaction: { entities, count, mode } inside data, saying what was removed. Detection is deliberately conservative: a card number must pass Luhn and an IBAN mod-97, so a false positive cannot silently destroy real page content. URLs, queries and identifiers the response uses to name what was fetched are left intact, and counters derived from the text (content_length, word_count, character_count) describe the text as it was extracted, before redaction.")
 
 
 class SearchWebRequestRedactPii(_RequestModel):
@@ -598,6 +613,12 @@ class StealthModeRequestStealthConfig(_RequestModel):
     timezone: Optional[str] = Field(default=None)
 
 
+class StealthModeRequestRedactPii(_RequestModel):
+    entities: Optional[List[str]] = Field(default=None, max_length=16)
+    replace_style: Optional[Literal["tag", "mask", "remove"]] = Field(default=None)
+    mode: Optional[Literal["fast", "model"]] = Field(default=None)
+
+
 class StealthModeRequest(_RequestModel):
     operation: Optional[Literal["scrape", "configure", "enable", "disable", "create_context", "create_page", "get_stats", "cleanup"]] = Field(default="configure", description="Stealth operation to perform. \"scrape\" creates a context, navigates to url, returns the requested formats and tears the context down, all in one billed call.")
     stealthConfig: Optional[StealthModeRequestStealthConfig] = Field(default=None, description="Stealth browser configuration")
@@ -610,7 +631,7 @@ class StealthModeRequest(_RequestModel):
     verbose: Optional[bool] = Field(default=False, description="Return the full generated fingerprint from create_context instead of a summary")
     respect_robots: Optional[bool] = Field(default=True, description="Respect the target site's robots.txt. Omitted, the compliant default (true) applies: a URL disallowed for CrawlForge is refused before any browser is launched and no credits are charged, and every navigation is checked the same way. The rule is matched against the CrawlForge product token even though the stealth browser presents a randomized User-Agent, so a site owner's \"User-agent: CrawlForge\" directive binds stealth traffic too. Setting this to false is honoured, returns a warning in the response, and is recorded against your API key.")
     max_inline_chars: Optional[float] = Field(default=40000, description="Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit).")
-    redact_pii: Optional[Union[bool, Dict[str, Any]]] = Field(default=False, description="Remove personal data from the text this call returns, before it is stored or sent back. true is shorthand for { mode: \"fast\" }: every entity, tagged. As an object: entities (any of EMAIL, PHONE, FINANCIAL, SECRET; omitted or empty means all four, and any other name is a 400 rather than a silent no-op), replace_style (\"tag\" \u2192 <EMAIL>, \"mask\" \u2192 [REDACTED], \"remove\" \u2192 nothing; default \"tag\") and mode (\"fast\", the default, is regex-only and costs no extra credits; \"model\" covers PERSON and LOCATION, needs an LLM and is rejected here \u2014 use the CrawlForge MCP server). The response carries redaction: { entities, count, mode } inside data, saying what was removed. Detection is deliberately conservative: a card number must pass Luhn and an IBAN mod-97, so a false positive cannot silently destroy real page content. URLs, queries and identifiers the response uses to name what was fetched are left intact, and counters derived from the text (content_length, word_count, character_count) describe the text as it was extracted, before redaction.")
+    redact_pii: Optional[Union[bool, StealthModeRequestRedactPii]] = Field(default=False, description="Remove personal data from the text this call returns, before it is stored or sent back. true is shorthand for { mode: \"fast\" }: every entity, tagged. As an object: entities (any of EMAIL, PHONE, FINANCIAL, SECRET; omitted or empty means all four, and any other name is a 400 rather than a silent no-op), replace_style (\"tag\" \u2192 <EMAIL>, \"mask\" \u2192 [REDACTED], \"remove\" \u2192 nothing; default \"tag\") and mode (\"fast\", the default, is regex-only and costs no extra credits; \"model\" covers PERSON and LOCATION, needs an LLM and is rejected here \u2014 use the CrawlForge MCP server). The response carries redaction: { entities, count, mode } inside data, saying what was removed. Detection is deliberately conservative: a card number must pass Luhn and an IBAN mod-97, so a false positive cannot silently destroy real page content. URLs, queries and identifiers the response uses to name what was fetched are left intact, and counters derived from the text (content_length, word_count, character_count) describe the text as it was extracted, before redaction.")
 
 
 class SummarizeContentRequest(_RequestModel):
