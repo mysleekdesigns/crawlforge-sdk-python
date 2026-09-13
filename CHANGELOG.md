@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.0 (2026-09-12)
+
+- New `browser_session()` method on both clients — an interactive browser
+  session held across several calls, driven by an `operation` enum
+  (`open | snapshot | act | read | screenshot | close | list`). `snapshot`
+  returns an accessibility tree whose interactive elements carry stable refs
+  (`@e1`, `@e2` …) and a later call can act on those refs, so a multi-step flow
+  no longer has to guess CSS selectors up front the way `scrape_with_actions`
+  does. Billed per operation: `open` 3 credits, `read` 2, and 1 each for
+  `snapshot`, `act`, `screenshot`, `close` and `list`.
+
+  Two limits to know before building on it: a session lives in one backend
+  instance's memory and does not survive a redeploy or restart, and a REST API
+  key may hold only **one** session at a time — a second `open` is refused by
+  name rather than queued, so call `close` when done instead of waiting for the
+  TTL. Persistent login profiles are not available over REST.
+
 ## 0.1.1 (2026-09-07)
 
 - Models regenerated from the corrected OpenAPI specification. The object form

@@ -20,6 +20,10 @@ __all__ = [
     "BatchScrapeRequestOptions",
     "BatchScrapeRequestRedactPii",
     "BatchScrapeRequest",
+    "BrowserSessionRequestViewport",
+    "BrowserSessionRequestActionsItem",
+    "BrowserSessionRequestRedactPii",
+    "BrowserSessionRequest",
     "CrawlDeepRequestRedactPii",
     "CrawlDeepRequest",
     "DeepResearchRequestResearchScope",
@@ -182,6 +186,46 @@ class BatchScrapeRequest(_RequestModel):
     options: Optional[BatchScrapeRequestOptions] = Field(default=None)
     max_inline_chars: Optional[int] = Field(default=None, ge=1000, le=10000000, description="Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit).")
     redact_pii: Optional[Union[bool, BatchScrapeRequestRedactPii]] = Field(default=None, description="Remove personal data from the text this call returns, before it is stored or sent back. true is shorthand for { mode: \"fast\" }: every entity, tagged. As an object: entities (any of EMAIL, PHONE, FINANCIAL, SECRET; omitted or empty means all four, and any other name is a 400 rather than a silent no-op), replace_style (\"tag\" \u2192 <EMAIL>, \"mask\" \u2192 [REDACTED], \"remove\" \u2192 nothing; default \"tag\") and mode (\"fast\", the default, is regex-only and costs no extra credits; \"model\" covers PERSON and LOCATION, needs an LLM and is rejected here \u2014 use the CrawlForge MCP server). The response carries redaction: { entities, count, mode } inside data, saying what was removed. Detection is deliberately conservative: a card number must pass Luhn and an IBAN mod-97, so a false positive cannot silently destroy real page content. URLs, queries and identifiers the response uses to name what was fetched are left intact, and counters derived from the text (content_length, word_count, character_count) describe the text as it was extracted, before redaction.")
+
+
+class BrowserSessionRequestViewport(_RequestModel):
+    """open: viewport size"""
+    width: Optional[float] = Field(default=None, description="800-1920")
+    height: Optional[float] = Field(default=None, description="600-1080")
+
+
+class BrowserSessionRequestActionsItem(_RequestModel):
+    type: Optional[Literal["wait", "click", "type", "press", "scroll", "screenshot", "executeJavaScript", "select", "hover", "navigate", "snapshot"]] = Field(default=None, description="Action to perform. executeJavaScript is refused in a session on the hosted API \u2014 the script would run in a browser on our servers, not on your machine.")
+    selector: Optional[str] = Field(default=None, description="What the action targets: a CSS selector, or a @e ref from the last snapshot")
+
+
+class BrowserSessionRequestRedactPii(_RequestModel):
+    entities: Optional[List[str]] = Field(default=None, max_length=16)
+    replace_style: Optional[Literal["tag", "mask", "remove"]] = Field(default=None)
+    mode: Optional[Literal["fast", "model"]] = Field(default=None)
+
+
+class BrowserSessionRequest(_RequestModel):
+    operation: Literal["open", "snapshot", "act", "read", "screenshot", "close", "list"] = Field(description="What this call does to the session. Every operation but open and list needs session_id. Priced per operation, not per call: open 3, read 2, snapshot / act / screenshot / close / list 1 each.")
+    session_id: Optional[str] = Field(default=None, description="The id operation \"open\" returned. Required by snapshot, act, read, screenshot and close.")
+    url: Optional[str] = Field(default=None, description="open: the URL to load the session on")
+    stealth: Optional[bool] = Field(default=False, description="open: run the session in the stealth browser instead of the standard pool")
+    ttl: Optional[float] = Field(default=None, description="open: seconds the session may live from the moment it opens (30-3600, default 600)")
+    activity_ttl: Optional[float] = Field(default=None, description="open: seconds the session may sit idle between calls (10-3600, default 300). The session dies at whichever of the two clocks runs out first.")
+    viewport: Optional[BrowserSessionRequestViewport] = Field(default=None, description="open: viewport size")
+    timeout: Optional[float] = Field(default=30000, description="Per-action timeout in ms (10000-120000). The REST call itself waits up to ~50s, so a timeout above that cannot be reached here.")
+    respect_robots: Optional[bool] = Field(default=True, description="Respect the target site's robots.txt. Omitted, the compliant default (true) applies: a URL disallowed for CrawlForge is refused before the browser opens and no credits are charged, and every navigate action inside the session is checked the same way. It applies to the call it is sent on and is never remembered by the session, so an override has to be repeated on each call that navigates. Setting this to false is honoured, returns a warning in the response, and is recorded against your API key.")
+    interactive_only: Optional[bool] = Field(default=True, description="snapshot: give refs to interactive elements only. Set false to list headings and landmarks too; only interactive elements are ever given a ref.")
+    max_nodes: Optional[float] = Field(default=200, description="snapshot: cap on how many nodes the tree lists (1-1000). The result reports truncated: true when the cap stopped the walk.")
+    actions: Optional[List[BrowserSessionRequestActionsItem]] = Field(default=None, description="act: the actions to run against the open page, 1-20 of them, in the same shape scrape_with_actions takes \u2014 see that tool for every per-action field. Target an element by a @e ref from the most recent snapshot (for example \"@e2\") in selector, or by a CSS selector. Navigation invalidates refs, so snapshot again after one.")
+    continue_on_error: Optional[bool] = Field(default=False, description="act: keep going past a failed action instead of stopping the call")
+    formats: Optional[List[Any]] = Field(default=["markdown"], description="read: formats to return from the live DOM \u2014 markdown, html, text, json. The page is read as it stands after everything the session has done, cookies and all; nothing is re-fetched.")
+    full_page: Optional[bool] = Field(default=False, description="screenshot: capture the full scrollable page")
+    format: Optional[Literal["png", "jpeg"]] = Field(default="png", description="screenshot: image format")
+    quality: Optional[float] = Field(default=80, description="screenshot: JPEG quality (0-100)")
+    selector: Optional[str] = Field(default=None, description="screenshot: capture just this element (a @e ref works)")
+    max_inline_chars: Optional[float] = Field(default=40000, description="Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit).")
+    redact_pii: Optional[Union[bool, BrowserSessionRequestRedactPii]] = Field(default=False, description="Remove personal data from the text this call returns, before it is stored or sent back. true is shorthand for { mode: \"fast\" }: every entity, tagged. As an object: entities (any of EMAIL, PHONE, FINANCIAL, SECRET; omitted or empty means all four, and any other name is a 400 rather than a silent no-op), replace_style (\"tag\" \u2192 <EMAIL>, \"mask\" \u2192 [REDACTED], \"remove\" \u2192 nothing; default \"tag\") and mode (\"fast\", the default, is regex-only and costs no extra credits; \"model\" covers PERSON and LOCATION, needs an LLM and is rejected here \u2014 use the CrawlForge MCP server). The response carries redaction: { entities, count, mode } inside data, saying what was removed. Detection is deliberately conservative: a card number must pass Luhn and an IBAN mod-97, so a false positive cannot silently destroy real page content. URLs, queries and identifiers the response uses to name what was fetched are left intact, and counters derived from the text (content_length, word_count, character_count) describe the text as it was extracted, before redaction.")
 
 
 class CrawlDeepRequestRedactPii(_RequestModel):
@@ -428,7 +472,7 @@ class RedditSearchRequest(_RequestModel):
     before: Optional[str] = Field(default=None, min_length=1, description="Only content posted before this date \u2014 same formats as after")
     limit: Optional[int] = Field(default=25, ge=1, le=100, description="Max results (1-100; thread mode: max comments returned)")
     sort: Optional[Literal["asc", "desc"]] = Field(default="desc", description="Sort by post date (desc = newest first)")
-    source: Optional[Literal["auto", "arctic_shift", "pullpush", "web_discovery"]] = Field(default="auto", description="Force a specific backend: auto, arctic_shift, web_discovery (unscoped keyword searches only \u2014 posts or comments), or pullpush (no longer serves automated clients; kept for when it returns)")
+    source: Optional[Literal["auto", "arctic_shift", "pullpush", "web_discovery"]] = Field(default="auto", description="Force a specific backend: auto (Arctic Shift first, PullPush second), arctic_shift, web_discovery (unscoped keyword searches only \u2014 posts or comments), or pullpush (the automatic second source; has refused automated clients since August 2026)")
 
 
 class ScrapeRequestFormatsItemHighlights(_RequestModel):
@@ -488,8 +532,8 @@ class ScrapeWithActionsRequestActionsItemPosition(_RequestModel):
 
 
 class ScrapeWithActionsRequestActionsItem(_RequestModel):
-    type: Optional[Literal["wait", "click", "type", "press", "scroll", "screenshot", "executeJavaScript", "select", "hover", "navigate"]] = Field(default=None, description="Action to perform")
-    selector: Optional[str] = Field(default=None, description="CSS selector the action targets")
+    type: Optional[Literal["wait", "click", "type", "press", "scroll", "screenshot", "executeJavaScript", "select", "hover", "navigate", "snapshot"]] = Field(default=None, description="Action to perform")
+    selector: Optional[str] = Field(default=None, description="What the action targets: either a CSS selector or an @e ref (for example @e1) taken from the most recent snapshot action in the same chain. Refs are invalidated by navigation \u2014 snapshot again after the page changes.")
     text: Optional[str] = Field(default=None, description="type: text to enter")
     key: Optional[str] = Field(default=None, description="press: key to press")
     value: Optional[str] = Field(default=None, description="select: one option to choose in the <select> named by selector. Matches an option by its value or by its visible label.")
@@ -522,6 +566,8 @@ class ScrapeWithActionsRequestActionsItem(_RequestModel):
     format: Optional[Literal["png", "jpeg"]] = Field(default=None, description="screenshot: image format")
     args: Optional[List[Any]] = Field(default=None, description="executeJavaScript: arguments passed to the script")
     returnResult: Optional[bool] = Field(default=None, description="executeJavaScript: return the script result")
+    interactiveOnly: Optional[bool] = Field(default=True, description="snapshot: list only interactive elements. Set false to include headings and landmarks too; only interactive elements are ever given a ref.")
+    maxNodes: Optional[float] = Field(default=200, description="snapshot: cap on how many nodes the tree lists (1-1000); under the default interactiveOnly every one of them carries a ref. The result reports truncated: true when the cap stopped the walk.")
 
 
 class ScrapeWithActionsRequestFormAutoFill(_RequestModel):
@@ -557,7 +603,7 @@ class ScrapeWithActionsRequestRedactPii(_RequestModel):
 
 class ScrapeWithActionsRequest(_RequestModel):
     url: str = Field(description="The URL to scrape")
-    actions: List[ScrapeWithActionsRequestActionsItem] = Field(description="Browser actions to perform before scraping (1-20)")
+    actions: List[ScrapeWithActionsRequestActionsItem] = Field(description="Browser actions to perform before scraping (1-20). A snapshot action first lists the interactive elements on the page as @e refs, which later actions can target in place of CSS selectors.")
     formats: Optional[List[Any]] = Field(default=["json"], description="Output formats: markdown, html, json, text, screenshots")
     captureIntermediateStates: Optional[bool] = Field(default=False, description="Capture page state after each action")
     captureScreenshots: Optional[bool] = Field(default=True, description="Take screenshots during action execution")
@@ -646,16 +692,20 @@ class SummarizeContentRequest(_RequestModel):
 
 class TrackChangesRequest(_RequestModel):
     url: str = Field(description="URL of the webpage to track")
-    operation: Optional[Literal["create_baseline", "compare", "monitor"]] = Field(default="compare", description="create_baseline captures and stores the current page text (kept 90 days). compare fetches the page again and diffs it against the stored baseline. monitor (scheduled checks) is not yet available on the hosted REST API and returns 501 \u2014 use the CrawlForge MCP server for scheduled monitoring.")
+    operation: Optional[Literal["create_baseline", "compare", "monitor"]] = Field(default="compare", description="create_baseline captures and stores the current page text (kept 90 days). compare fetches the page again and diffs it against the stored baseline. monitor creates a hosted monitor that fetches and compares the page on a schedule; creating it costs nothing, and each scheduled check bills 3 credits per target that was fetched and compared. Manage monitors at /api/v1/monitors or in the dashboard.")
     selector: Optional[str] = Field(default=None, description="CSS selector to scope tracking to part of the page (e.g. \".pricing-table\"). Baselines are stored per (url, selector) pair; 422 if the selector matches nothing.")
     update_baseline: Optional[bool] = Field(default=False, description="compare only: overwrite the stored baseline with the freshly fetched content after diffing")
-    respect_robots: Optional[bool] = Field(default=True, description="Fetch the origin's robots.txt and refuse the URL if it disallows CrawlForge. A missing or unreachable robots.txt is treated as no restrictions. Returns 403 ROBOTS_DISALLOWED for both create_baseline and compare, and no credits are charged.")
+    respect_robots: Optional[bool] = Field(default=True, description="create_baseline and compare: fetch the origin's robots.txt and refuse the URL if it disallows CrawlForge. A missing or unreachable robots.txt is treated as no restrictions. Returns 403 ROBOTS_DISALLOWED, and no credits are charged. Hosted monitors always respect robots.txt; a disallowed target is reported as a page error.")
+    schedule: Optional[str] = Field(default=None, description="monitor only: five-field cron expression, evaluated in UTC, for how often the monitor checks the page (default \"0 * * * *\", hourly). Consecutive runs must be at least 5 minutes apart; 400 VALIDATION_ERROR otherwise.")
+    notify_emails: Optional[List[str]] = Field(default=None, max_length=5, description="monitor only: up to 5 addresses that receive a summary email when a check finds new, changed, blocked or errored pages")
+    webhook_url: Optional[str] = Field(default=None, description="monitor only: an https endpoint that receives a signed POST (monitor.page per changed page, then monitor.check.completed) after every check. The signing secret is returned once, as webhook_secret on the created monitor.")
 
 
 REQUEST_MODELS = (
     AgentRequest,
     AnalyzeContentRequest,
     BatchScrapeRequest,
+    BrowserSessionRequest,
     CrawlDeepRequest,
     DeepResearchRequest,
     ExtractContentRequest,

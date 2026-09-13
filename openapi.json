@@ -3,7 +3,7 @@
   "info": {
     "title": "CrawlForge REST API",
     "version": "1.0.0",
-    "description": "30 metered web tools behind one API key, sent as the X-API-Key header. Every call is priced in credits: x-credits on an operation is its base price, and a tool with a per-unit or conditional price explains it in x-credits-note and x-extra. Credits are deducted only after a call succeeds. Every error response, whatever its status, charges nothing. A successful response reports credits_used and credits_remaining. Each tool also answers GET with the self-description this document was generated from. Full reference, including each tool's response shape: https://www.crawlforge.dev/docs/api-reference",
+    "description": "31 metered web tools behind one API key, sent as the X-API-Key header. Every call is priced in credits: x-credits on an operation is its base price, and a tool with a per-unit or conditional price explains it in x-credits-note and x-extra. Credits are deducted only after a call succeeds. Every error response, whatever its status, charges nothing. A successful response reports credits_used and credits_remaining. Each tool also answers GET with the self-description this document was generated from. Full reference, including each tool's response shape: https://www.crawlforge.dev/docs/api-reference",
     "termsOfService": "https://www.crawlforge.dev/terms",
     "contact": {
       "name": "CrawlForge",
@@ -414,6 +414,152 @@
       "get": {
         "operationId": "describe_batch_scrape",
         "summary": "Describe batch_scrape",
+        "description": "The tool's self-description: its price, its request schema and an example body. No API key is needed.",
+        "tags": [
+          "tools"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The ToolInfo this document was generated from.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/browser_session": {
+      "post": {
+        "operationId": "browser_session",
+        "summary": "Drive a browser across several calls, keeping the page, its cookies and its login in between. The loop is: open a session on a URL, snapshot it to list the interactive elements as refs (@e1, @e2 ...), act on those refs, read the content, close. Because the page stays open you can look before each step instead of committing to a whole chain up front, so a wrong selector costs one call rather than all of them. Not for a page that renders without interaction (scrape), and not for an interaction you can write out in advance — that is one scrape_with_actions call.",
+        "tags": [
+          "tools"
+        ],
+        "x-credits": 3,
+        "x-credits-note": "Priced per operation, not per call: open 3, read 2, and snapshot, act, screenshot, close and list 1 each. The published 3 is the ceiling — it is what an unrecognised operation costs and what is reserved before the body is read, and the charge drops to the operation's own price. A login-then-read flow (open, snapshot, act, act, read, close) costs 9.",
+        "x-extra": {
+          "credits_cost_by_operation": {
+            "note": "Nothing in a session is free: close and list are bookkeeping and still cost 1. An absent or unrecognised operation is charged the flat 3.",
+            "open": 3,
+            "snapshot": 1,
+            "act": 1,
+            "read": 2,
+            "screenshot": 1,
+            "close": 1,
+            "list": 1
+          },
+          "session_lifetime": {
+            "ttl_seconds": 600,
+            "activity_ttl_seconds": 300,
+            "note": "A session dies 600s after it opens or 300s after its last use, whichever comes first — both adjustable on open. Close it when you are done rather than leaving it to expire."
+          },
+          "limits": {
+            "concurrent_sessions": 1,
+            "note": "One open session per API key on the hosted API. A second open is refused by name and charged nothing — close the first, or wait for it to expire. Sessions share the backend browser pool with every other tool, which is what the cap protects."
+          },
+          "availability": {
+            "hosted_api": true,
+            "mcp_server": true,
+            "note": "Runs on the CrawlForge execution backend, where the page itself lives. A session id is usable only from the backend instance that opened it and only while that instance is running, so a deploy or a restart ends every open session — treat a \"session not found\" as a signal to open a new one rather than an error to retry. Screenshots come back as crawlforge://screenshot/{id} resource URIs, which this endpoint passes through without resolving, so for now the screenshot operation is usable only from the CrawlForge MCP server. executeJavaScript is refused inside a hosted session."
+          }
+        },
+        "x-docs-url": "https://www.crawlforge.dev/docs/api-reference/tools/browser-session",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowserSessionRequest"
+              },
+              "example": {
+                "operation": "open",
+                "url": "https://app.example.com/login",
+                "ttl": 600
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The tool's result; 3 credits charged (see x-credits-note and x-extra for add-ons).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolSuccess"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR: the body does not match the request schema.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "MISSING_API_KEY or INVALID_API_KEY.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "INSUFFICIENT_CREDITS: the balance does not cover the tool's base price. X-Auto-Recharge-Triggered says whether an automatic recharge was started; retry once it lands.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMIT_EXCEEDED: your plan's rate limit. Retry-After: 60.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "TOOL_ERROR, INTERNAL_ERROR or CREDIT_DEDUCTION_FAILED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error. Which of 403, 404, 413, 422, 501, 502, 503 and 504 a tool can return depends on what it does (fetching a page, calling the execution backend, reading stored results); the code vocabulary is listed on the ErrorResponse schema.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "describe_browser_session",
+        "summary": "Describe browser_session",
         "description": "The tool's self-description: its price, its request schema and an example body. No API key is needed.",
         "tags": [
           "tools"
@@ -1582,7 +1728,8 @@
           "notes": [
             "Responses include response_time_ms — how long the target took to respond and deliver its body.",
             "Bodies are decoded using the response's own charset (Content-Type, then a <meta charset> sniff) rather than assumed UTF-8.",
-            "A body larger than 25MB is refused with RESPONSE_TOO_LARGE (413) and is not charged."
+            "A body larger than 25MB is refused with RESPONSE_TOO_LARGE (413) and is not charged.",
+            "A reddit.com URL is refused with USE_REDDIT_SEARCH (422) and is not charged: reddit.com blocks every non-browser client, and the message names the reddit_search call that reads the same posts and comments."
           ]
         },
         "x-docs-url": "https://www.crawlforge.dev/docs/api-reference/tools/fetch-url",
@@ -2555,7 +2702,7 @@
     "/tools/reddit_search": {
       "post": {
         "operationId": "reddit_search",
-        "summary": "Search Reddit posts/comments or read a full comment thread — reads the Arctic Shift community archive (reddit.com blocks direct scraping). A scoped search (subreddit or author) queries the archive directly. A Reddit-wide keyword search finds posts with a site-restricted web search and then reads those posts from the archive — or, in comments mode, searches each of the first five posts' comments for the keywords — because Arctic Shift cannot keyword-search across all of Reddit. A scoped comment search Arctic Shift times out on is retried over the last 7d and 3d and reports window_applied. PullPush stopped serving automated clients in August 2026 and is no longer tried automatically.",
+        "summary": "Search Reddit posts/comments or read a full comment thread — reads the Arctic Shift community archive (reddit.com blocks direct scraping). A scoped search (subreddit or author) queries the archive directly. A Reddit-wide keyword search finds posts with a site-restricted web search and then reads those posts from the archive — or, in comments mode, searches each of the first five posts' comments for the keywords — because Arctic Shift cannot keyword-search across all of Reddit. A scoped comment search Arctic Shift times out on is retried over the last 7d and 3d and reports window_applied. Arctic Shift is tried first and PullPush (api.pullpush.io) second: when Arctic Shift or the web-discovery path fails a posts or comments search, PullPush is queried and the response reports fallback_used. PullPush has refused automated clients since August 2026, so that fallback usually reports its refusal too.",
         "tags": [
           "tools"
         ],
@@ -3747,7 +3894,7 @@
     "/tools/track_changes": {
       "post": {
         "operationId": "track_changes",
-        "summary": "Detect content changes on a page by comparing it against a stored baseline (create_baseline, then compare)",
+        "summary": "Detect content changes on a page by comparing it against a stored baseline (create_baseline, then compare), or create a hosted monitor that checks it on a schedule (monitor)",
         "tags": [
           "tools"
         ],
@@ -3758,6 +3905,8 @@
             "Change detection is text-based (line diff of visible text, whitespace-normalized). JavaScript-rendered content is not executed — use the CrawlForge MCP server for browser-rendered tracking.",
             "compare also returns structural_similarity (0-1): how far the tracked region still matches the baseline in tag vocabulary and nesting depth. A high change_percent with a high structural_similarity is the same layout with new copy; a low structural_similarity means the markup itself was rebuilt, which is usually what breaks a scraper.",
             "structural_similarity is null when the stored baseline was captured before this field existed. Re-run create_baseline, or pass update_baseline once, to start scoring it.",
+            "A bot-defence challenge wall or an unusable document is returned as 502 BLOCKED or UNUSABLE_DOCUMENT with no charge, and is never reported as a change. Hosted monitors record such a page as blocked.",
+            "monitor returns the created monitor (including its webhook_secret, shown only here) and estimated_credits_per_month; the response bills 0 credits. Scheduled checks appear in the request log as track_changes calls.",
             "Documented option objects (trackingOptions, storageOptions, monitoringOptions) are accepted but not applied by the hosted REST API."
           ]
         },
@@ -3927,7 +4076,7 @@
       },
       "ErrorResponse": {
         "type": "object",
-        "description": "Every error carries error.code and error.message; no error response is charged. Codes by status:\n400 VALIDATION_ERROR (details holds the validation issues; also a URL that resolves to a private or local address, or a body that is not a JSON object). scrape_template adds UNKNOWN_TEMPLATE, NO_TEMPLATE_MATCH, TEMPLATE_UNAVAILABLE, TEMPLATE_MISMATCH, MISSING_URL, INVALID_TEMPLATE_PARAMS and CREDENTIAL_MISSING; scrape adds UNSUPPORTED_FORMAT; read_result adds PATH_NOT_FOUND.\n401 MISSING_API_KEY, INVALID_API_KEY.\n402 INSUFFICIENT_CREDITS (details: required, tool, autoRechargeTriggered, upgradeUrl; the X-Auto-Recharge-Triggered header says whether an automatic recharge was started).\n403 ROBOTS_DISALLOWED (robots.txt disallows the path for CrawlForge; respect_robots: false overrides it and the override is recorded), HOST_BLOCKED (a host on the operator blocklist).\n404 RESULT_NOT_FOUND, BATCH_NOT_FOUND, BASELINE_NOT_FOUND (an unknown or expired handle, batch id or baseline).\n413 RESPONSE_TOO_LARGE, DOCUMENT_TOO_LARGE.\n422 EXTRACTION_FAILED, SELECTOR_NOT_FOUND, NO_PAGES_MAPPED, DOCUMENT_PARSE_FAILED.\n429 RATE_LIMIT_EXCEEDED (your plan's rate limit; Retry-After: 60), HOST_BACKOFF (the target site asked us to wait via Retry-After; not overridable).\n500 TOOL_ERROR, INTERNAL_ERROR, CREDIT_DEDUCTION_FAILED.\n501 OPERATION_NOT_AVAILABLE, UNSUPPORTED_DOCUMENT_TYPE (supported by the CrawlForge MCP server with the same key).\n502 FETCH_FAILED, TARGET_HTTP_ERROR, DOCUMENT_FETCH_ERROR (the target could not be reached or answered with an error), BLOCKED (a bot-defence challenge page; scrape names the vendor in `blocked`), UNUSABLE_DOCUMENT (an empty shell or error placeholder served as a page), MCP_UPSTREAM_ERROR, MCP_UPSTREAM_UNAVAILABLE, MCP_PROXY_MISCONFIGURED, RESEARCH_SEARCH_FAILED, RESEARCH_SEARCH_UNAVAILABLE, TOOL_ERROR (the execution backend reported a tool failure).\n503 TOOL_NOT_AVAILABLE (needs a browser, an LLM or local infrastructure the hosted API does not run), STORAGE_UNAVAILABLE, MCP_PROXY_MISCONFIGURED, RESEARCH_NOT_CONFIGURED, RESEARCH_RATE_LIMITED.\n504 FETCH_TIMEOUT, MCP_UPSTREAM_TIMEOUT, RESEARCH_SEARCH_TIMEOUT.",
+        "description": "Every error carries error.code and error.message; no error response is charged. Codes by status:\n400 VALIDATION_ERROR (details holds the validation issues; also a URL that resolves to a private or local address, or a body that is not a JSON object). scrape_template adds UNKNOWN_TEMPLATE, NO_TEMPLATE_MATCH, TEMPLATE_UNAVAILABLE, TEMPLATE_MISMATCH, MISSING_URL, INVALID_TEMPLATE_PARAMS and CREDENTIAL_MISSING; scrape adds UNSUPPORTED_FORMAT; read_result adds PATH_NOT_FOUND.\n401 MISSING_API_KEY, INVALID_API_KEY.\n402 INSUFFICIENT_CREDITS (details: required, tool, autoRechargeTriggered, upgradeUrl; the X-Auto-Recharge-Triggered header says whether an automatic recharge was started).\n403 ROBOTS_DISALLOWED (robots.txt disallows the path for CrawlForge; respect_robots: false overrides it and the override is recorded), HOST_BLOCKED (a host on the operator blocklist).\n404 RESULT_NOT_FOUND, BATCH_NOT_FOUND, BASELINE_NOT_FOUND (an unknown or expired handle, batch id or baseline).\n413 RESPONSE_TOO_LARGE, DOCUMENT_TOO_LARGE.\n422 EXTRACTION_FAILED, SELECTOR_NOT_FOUND, NO_PAGES_MAPPED, DOCUMENT_PARSE_FAILED, USE_REDDIT_SEARCH (a reddit.com URL: reddit.com refuses every non-browser client, so it is never fetched; the message names the reddit_search call that reads the same posts and comments from the community archive).\n429 RATE_LIMIT_EXCEEDED (your plan's rate limit; Retry-After: 60), HOST_BACKOFF (the target site asked us to wait via Retry-After; not overridable).\n500 TOOL_ERROR, INTERNAL_ERROR, CREDIT_DEDUCTION_FAILED.\n501 OPERATION_NOT_AVAILABLE, UNSUPPORTED_DOCUMENT_TYPE (supported by the CrawlForge MCP server with the same key).\n502 FETCH_FAILED, TARGET_HTTP_ERROR, DOCUMENT_FETCH_ERROR (the target could not be reached or answered with an error), BLOCKED (a bot-defence challenge page; scrape names the vendor in `blocked`), UNUSABLE_DOCUMENT (an empty shell or error placeholder served as a page), MCP_UPSTREAM_ERROR, MCP_UPSTREAM_UNAVAILABLE, MCP_PROXY_MISCONFIGURED, RESEARCH_SEARCH_FAILED, RESEARCH_SEARCH_UNAVAILABLE, TOOL_ERROR (the execution backend reported a tool failure).\n503 TOOL_NOT_AVAILABLE (needs a browser, an LLM or local infrastructure the hosted API does not run), STORAGE_UNAVAILABLE, MCP_PROXY_MISCONFIGURED, RESEARCH_NOT_CONFIGURED, RESEARCH_RATE_LIMITED.\n504 FETCH_TIMEOUT, MCP_UPSTREAM_TIMEOUT, RESEARCH_SEARCH_TIMEOUT.",
         "required": [
           "error"
         ],
@@ -4346,6 +4495,190 @@
         },
         "required": [
           "urls"
+        ]
+      },
+      "BrowserSessionRequest": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "open",
+              "snapshot",
+              "act",
+              "read",
+              "screenshot",
+              "close",
+              "list"
+            ],
+            "description": "What this call does to the session. Every operation but open and list needs session_id. Priced per operation, not per call: open 3, read 2, snapshot / act / screenshot / close / list 1 each."
+          },
+          "session_id": {
+            "type": "string",
+            "description": "The id operation \"open\" returned. Required by snapshot, act, read, screenshot and close."
+          },
+          "url": {
+            "type": "string",
+            "description": "open: the URL to load the session on"
+          },
+          "stealth": {
+            "type": "boolean",
+            "default": false,
+            "description": "open: run the session in the stealth browser instead of the standard pool"
+          },
+          "ttl": {
+            "type": "number",
+            "description": "open: seconds the session may live from the moment it opens (30-3600, default 600)"
+          },
+          "activity_ttl": {
+            "type": "number",
+            "description": "open: seconds the session may sit idle between calls (10-3600, default 300). The session dies at whichever of the two clocks runs out first."
+          },
+          "viewport": {
+            "type": "object",
+            "description": "open: viewport size",
+            "properties": {
+              "width": {
+                "type": "number",
+                "description": "800-1920"
+              },
+              "height": {
+                "type": "number",
+                "description": "600-1080"
+              }
+            }
+          },
+          "timeout": {
+            "type": "number",
+            "default": 30000,
+            "description": "Per-action timeout in ms (10000-120000). The REST call itself waits up to ~50s, so a timeout above that cannot be reached here."
+          },
+          "respect_robots": {
+            "type": "boolean",
+            "default": true,
+            "description": "Respect the target site's robots.txt. Omitted, the compliant default (true) applies: a URL disallowed for CrawlForge is refused before the browser opens and no credits are charged, and every navigate action inside the session is checked the same way. It applies to the call it is sent on and is never remembered by the session, so an override has to be repeated on each call that navigates. Setting this to false is honoured, returns a warning in the response, and is recorded against your API key."
+          },
+          "interactive_only": {
+            "type": "boolean",
+            "default": true,
+            "description": "snapshot: give refs to interactive elements only. Set false to list headings and landmarks too; only interactive elements are ever given a ref."
+          },
+          "max_nodes": {
+            "type": "number",
+            "default": 200,
+            "description": "snapshot: cap on how many nodes the tree lists (1-1000). The result reports truncated: true when the cap stopped the walk."
+          },
+          "actions": {
+            "type": "array",
+            "description": "act: the actions to run against the open page, 1-20 of them, in the same shape scrape_with_actions takes — see that tool for every per-action field. Target an element by a @e ref from the most recent snapshot (for example \"@e2\") in selector, or by a CSS selector. Navigation invalidates refs, so snapshot again after one.",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "wait",
+                    "click",
+                    "type",
+                    "press",
+                    "scroll",
+                    "screenshot",
+                    "executeJavaScript",
+                    "select",
+                    "hover",
+                    "navigate",
+                    "snapshot"
+                  ],
+                  "description": "Action to perform. executeJavaScript is refused in a session on the hosted API — the script would run in a browser on our servers, not on your machine."
+                },
+                "selector": {
+                  "type": "string",
+                  "description": "What the action targets: a CSS selector, or a @e ref from the last snapshot"
+                }
+              }
+            }
+          },
+          "continue_on_error": {
+            "type": "boolean",
+            "default": false,
+            "description": "act: keep going past a failed action instead of stopping the call"
+          },
+          "formats": {
+            "type": "array",
+            "default": [
+              "markdown"
+            ],
+            "description": "read: formats to return from the live DOM — markdown, html, text, json. The page is read as it stands after everything the session has done, cookies and all; nothing is re-fetched."
+          },
+          "full_page": {
+            "type": "boolean",
+            "default": false,
+            "description": "screenshot: capture the full scrollable page"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "png",
+              "jpeg"
+            ],
+            "default": "png",
+            "description": "screenshot: image format"
+          },
+          "quality": {
+            "type": "number",
+            "default": 80,
+            "description": "screenshot: JPEG quality (0-100)"
+          },
+          "selector": {
+            "type": "string",
+            "description": "screenshot: capture just this element (a @e ref works)"
+          },
+          "max_inline_chars": {
+            "type": "number",
+            "default": 40000,
+            "description": "Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit)."
+          },
+          "redact_pii": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "entities": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "replace_style": {
+                    "type": "string",
+                    "enum": [
+                      "tag",
+                      "mask",
+                      "remove"
+                    ]
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "fast",
+                      "model"
+                    ]
+                  }
+                }
+              }
+            ],
+            "default": false,
+            "description": "Remove personal data from the text this call returns, before it is stored or sent back. true is shorthand for { mode: \"fast\" }: every entity, tagged. As an object: entities (any of EMAIL, PHONE, FINANCIAL, SECRET; omitted or empty means all four, and any other name is a 400 rather than a silent no-op), replace_style (\"tag\" → <EMAIL>, \"mask\" → [REDACTED], \"remove\" → nothing; default \"tag\") and mode (\"fast\", the default, is regex-only and costs no extra credits; \"model\" covers PERSON and LOCATION, needs an LLM and is rejected here — use the CrawlForge MCP server). The response carries redaction: { entities, count, mode } inside data, saying what was removed. Detection is deliberately conservative: a card number must pass Luhn and an IBAN mod-97, so a false positive cannot silently destroy real page content. URLs, queries and identifiers the response uses to name what was fetched are left intact, and counters derived from the text (content_length, word_count, character_count) describe the text as it was extracted, before redaction."
+          }
+        },
+        "required": [
+          "operation"
         ]
       },
       "CrawlDeepRequest": {
@@ -5487,7 +5820,7 @@
               "pullpush",
               "web_discovery"
             ],
-            "description": "Force a specific backend: auto, arctic_shift, web_discovery (unscoped keyword searches only — posts or comments), or pullpush (no longer serves automated clients; kept for when it returns)"
+            "description": "Force a specific backend: auto (Arctic Shift first, PullPush second), arctic_shift, web_discovery (unscoped keyword searches only — posts or comments), or pullpush (the automatic second source; has refused automated clients since August 2026)"
           }
         }
       },
@@ -5813,7 +6146,7 @@
           },
           "actions": {
             "type": "array",
-            "description": "Browser actions to perform before scraping (1-20)",
+            "description": "Browser actions to perform before scraping (1-20). A snapshot action first lists the interactive elements on the page as @e refs, which later actions can target in place of CSS selectors.",
             "items": {
               "type": "object",
               "properties": {
@@ -5829,13 +6162,14 @@
                     "executeJavaScript",
                     "select",
                     "hover",
-                    "navigate"
+                    "navigate",
+                    "snapshot"
                   ],
                   "description": "Action to perform"
                 },
                 "selector": {
                   "type": "string",
-                  "description": "CSS selector the action targets"
+                  "description": "What the action targets: either a CSS selector or an @e ref (for example @e1) taken from the most recent snapshot action in the same chain. Refs are invalidated by navigation — snapshot again after the page changes."
                 },
                 "text": {
                   "type": "string",
@@ -6002,6 +6336,16 @@
                 "returnResult": {
                   "type": "boolean",
                   "description": "executeJavaScript: return the script result"
+                },
+                "interactiveOnly": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "snapshot: list only interactive elements. Set false to include headings and landmarks too; only interactive elements are ever given a ref."
+                },
+                "maxNodes": {
+                  "type": "number",
+                  "default": 200,
+                  "description": "snapshot: cap on how many nodes the tree lists (1-1000); under the default interactiveOnly every one of them carries a ref. The result reports truncated: true when the cap stopped the walk."
                 }
               }
             }
@@ -6546,7 +6890,7 @@
               "compare",
               "monitor"
             ],
-            "description": "create_baseline captures and stores the current page text (kept 90 days). compare fetches the page again and diffs it against the stored baseline. monitor (scheduled checks) is not yet available on the hosted REST API and returns 501 — use the CrawlForge MCP server for scheduled monitoring."
+            "description": "create_baseline captures and stores the current page text (kept 90 days). compare fetches the page again and diffs it against the stored baseline. monitor creates a hosted monitor that fetches and compares the page on a schedule; creating it costs nothing, and each scheduled check bills 3 credits per target that was fetched and compared. Manage monitors at /api/v1/monitors or in the dashboard."
           },
           "selector": {
             "type": "string",
@@ -6560,7 +6904,26 @@
           "respect_robots": {
             "default": true,
             "type": "boolean",
-            "description": "Fetch the origin's robots.txt and refuse the URL if it disallows CrawlForge. A missing or unreachable robots.txt is treated as no restrictions. Returns 403 ROBOTS_DISALLOWED for both create_baseline and compare, and no credits are charged."
+            "description": "create_baseline and compare: fetch the origin's robots.txt and refuse the URL if it disallows CrawlForge. A missing or unreachable robots.txt is treated as no restrictions. Returns 403 ROBOTS_DISALLOWED, and no credits are charged. Hosted monitors always respect robots.txt; a disallowed target is reported as a page error."
+          },
+          "schedule": {
+            "type": "string",
+            "description": "monitor only: five-field cron expression, evaluated in UTC, for how often the monitor checks the page (default \"0 * * * *\", hourly). Consecutive runs must be at least 5 minutes apart; 400 VALIDATION_ERROR otherwise."
+          },
+          "notify_emails": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "email",
+              "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+            },
+            "description": "monitor only: up to 5 addresses that receive a summary email when a check finds new, changed, blocked or errored pages"
+          },
+          "webhook_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "monitor only: an https endpoint that receives a signed POST (monitor.page per changed page, then monitor.check.completed) after every check. The signing secret is returned once, as webhook_secret on the created monitor."
           }
         },
         "required": [

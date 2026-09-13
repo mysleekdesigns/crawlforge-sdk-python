@@ -38,7 +38,7 @@ def spec_tools(spec: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
 
 def test_tools_table_matches_the_spec_paths(spec: Dict[str, Any]) -> None:
     expected = spec_tools(spec)
-    assert len(expected) == 30
+    assert len(expected) == 31
     assert list(TOOLS) == list(expected)
     for name, post in expected.items():
         tool = TOOLS[name]
@@ -106,7 +106,7 @@ def test_request_models_forbid_unknown_keys_and_response_models_allow_them() -> 
 
 def test_public_models_module_re_exports_everything() -> None:
     assert set(public_models.__all__) == set(models.__all__)
-    assert len(models.REQUEST_MODELS) == 30
+    assert len(models.REQUEST_MODELS) == 31
     assert all(name in models.__all__ for name in ("ToolInfo", "ScrapeRequest"))
 
 

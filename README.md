@@ -1,7 +1,7 @@
 # CrawlForge Python SDK
 
 The official Python client for the [CrawlForge REST API](https://www.crawlforge.dev/docs/api-reference):
-30 metered web tools (scrape, search, crawl, extract, research) behind one API key.
+31 metered web tools (scrape, search, crawl, extract, research) behind one API key.
 
 - Sync `CrawlForge` and async `AsyncCrawlForge` clients on `httpx`
 - One typed method per tool, generated from the API's [OpenAPI spec](https://www.crawlforge.dev/openapi.json)
@@ -107,6 +107,7 @@ succeeded.
 | `agent` | 8 |  | [docs](https://www.crawlforge.dev/docs/api-reference/tools/agent) |
 | `analyze_content` | 3 |  | [docs](https://www.crawlforge.dev/docs/api-reference/tools/analyze-content) |
 | `batch_scrape` | 5 | 5 per URL attempted (skipped URLs are not charged) | [docs](https://www.crawlforge.dev/docs/api-reference/tools/batch-scrape) |
+| `browser_session` | 3 | Priced per operation, not per call: open 3, read 2, and snapshot, act, screenshot, close and list 1 each. The published 3 is the ceiling — it is what an unrecognised operation costs and what is reserved before the body is read, and the charge drops to the operation's own price. A login-then-read flow (open, snapshot, act, act, read, close) costs 9. | [docs](https://www.crawlforge.dev/docs/api-reference/tools/browser-session) |
 | `crawl_deep` | 4 |  | [docs](https://www.crawlforge.dev/docs/api-reference/tools/crawl-deep) |
 | `deep_research` | 10 |  | [docs](https://www.crawlforge.dev/docs/api-reference/tools/deep-research) |
 | `extract_content` | 2 |  | [docs](https://www.crawlforge.dev/docs/api-reference/tools/extract-content) |

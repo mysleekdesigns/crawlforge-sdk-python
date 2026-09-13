@@ -15,6 +15,10 @@ from crawlforge._generated.models import (
     BatchScrapeRequestOutputConfig,
     BatchScrapeRequestRedactPii,
     BatchScrapeRequestUrlsItem,
+    BrowserSessionRequest,
+    BrowserSessionRequestActionsItem,
+    BrowserSessionRequestRedactPii,
+    BrowserSessionRequestViewport,
     CrawlDeepRequest,
     CrawlDeepRequestRedactPii,
     DeepResearchRequest,
@@ -89,6 +93,14 @@ TOOLS: Dict[str, ToolSpec] = {
         docs_url="https://www.crawlforge.dev/docs/api-reference/tools/batch-scrape",
         summary="Fetch up to 50 URLs concurrently in one synchronous call, returning title, text, and optional CSS-extracted fields per URL",
         request_model=BatchScrapeRequest,
+    ),
+    "browser_session": ToolSpec(
+        name="browser_session",
+        credits=3,
+        credits_note="Priced per operation, not per call: open 3, read 2, and snapshot, act, screenshot, close and list 1 each. The published 3 is the ceiling \u2014 it is what an unrecognised operation costs and what is reserved before the body is read, and the charge drops to the operation's own price. A login-then-read flow (open, snapshot, act, act, read, close) costs 9.",
+        docs_url="https://www.crawlforge.dev/docs/api-reference/tools/browser-session",
+        summary="Drive a browser across several calls, keeping the page, its cookies and its login in between. The loop is: open a session on a URL, snapshot it to list the interactive elements as refs (@e1, @e2 ...), act on those refs, read the content, close. Because the page stays open you can look before each step instead of committing to a whole chain up front, so a wrong selector costs one call rather than all of them. Not for a page that renders without interaction (scrape), and not for an interaction you can write out in advance \u2014 that is one scrape_with_actions call.",
+        request_model=BrowserSessionRequest,
     ),
     "crawl_deep": ToolSpec(
         name="crawl_deep",
@@ -231,7 +243,7 @@ TOOLS: Dict[str, ToolSpec] = {
         credits=5,
         credits_note=None,
         docs_url="https://www.crawlforge.dev/docs/api-reference/tools/reddit-search",
-        summary="Search Reddit posts/comments or read a full comment thread \u2014 reads the Arctic Shift community archive (reddit.com blocks direct scraping). A scoped search (subreddit or author) queries the archive directly. A Reddit-wide keyword search finds posts with a site-restricted web search and then reads those posts from the archive \u2014 or, in comments mode, searches each of the first five posts' comments for the keywords \u2014 because Arctic Shift cannot keyword-search across all of Reddit. A scoped comment search Arctic Shift times out on is retried over the last 7d and 3d and reports window_applied. PullPush stopped serving automated clients in August 2026 and is no longer tried automatically.",
+        summary="Search Reddit posts/comments or read a full comment thread \u2014 reads the Arctic Shift community archive (reddit.com blocks direct scraping). A scoped search (subreddit or author) queries the archive directly. A Reddit-wide keyword search finds posts with a site-restricted web search and then reads those posts from the archive \u2014 or, in comments mode, searches each of the first five posts' comments for the keywords \u2014 because Arctic Shift cannot keyword-search across all of Reddit. A scoped comment search Arctic Shift times out on is retried over the last 7d and 3d and reports window_applied. Arctic Shift is tried first and PullPush (api.pullpush.io) second: when Arctic Shift or the web-discovery path fails a posts or comments search, PullPush is queried and the response reports fallback_used. PullPush has refused automated clients since August 2026, so that fallback usually reports its refusal too.",
         request_model=RedditSearchRequest,
     ),
     "scrape": ToolSpec(
@@ -303,7 +315,7 @@ TOOLS: Dict[str, ToolSpec] = {
         credits=3,
         credits_note=None,
         docs_url="https://www.crawlforge.dev/docs/api-reference/tools/track-changes",
-        summary="Detect content changes on a page by comparing it against a stored baseline (create_baseline, then compare)",
+        summary="Detect content changes on a page by comparing it against a stored baseline (create_baseline, then compare), or create a hosted monitor that checks it on a schedule (monitor)",
         request_model=TrackChangesRequest,
     ),
 }
@@ -406,6 +418,63 @@ class SyncToolsMixin:
                 "extraction_template": extraction_template,
                 "output_config": output_config,
                 "options": options,
+                "max_inline_chars": max_inline_chars,
+                "redact_pii": redact_pii,
+            },
+        )
+
+    def browser_session(
+        self,
+        request: Optional[Union[BrowserSessionRequest, Dict[str, Any]]] = None,
+        /,
+        *,
+        operation: Optional[Literal["open", "snapshot", "act", "read", "screenshot", "close", "list"]] = None,
+        session_id: Optional[str] = None,
+        url: Optional[str] = None,
+        stealth: Optional[bool] = None,
+        ttl: Optional[float] = None,
+        activity_ttl: Optional[float] = None,
+        viewport: Optional[Union[BrowserSessionRequestViewport, Dict[str, Any]]] = None,
+        timeout: Optional[float] = None,
+        respect_robots: Optional[bool] = None,
+        interactive_only: Optional[bool] = None,
+        max_nodes: Optional[float] = None,
+        actions: Optional[List[Union[BrowserSessionRequestActionsItem, Dict[str, Any]]]] = None,
+        continue_on_error: Optional[bool] = None,
+        formats: Optional[List[Any]] = None,
+        full_page: Optional[bool] = None,
+        format: Optional[Literal["png", "jpeg"]] = None,
+        quality: Optional[float] = None,
+        selector: Optional[str] = None,
+        max_inline_chars: Optional[float] = None,
+        redact_pii: Optional[Union[bool, BrowserSessionRequestRedactPii, Dict[str, Any]]] = None,
+    ) -> ToolResult:
+        """Drive a browser across several calls, keeping the page, its cookies and its login in between. The loop is: open a session on a URL, snapshot it to list the interactive elements as refs (@e1, @e2 ...), act on those refs, read the content, close. Because the page stays open you can look before each step instead of committing to a whole chain up front, so a wrong selector costs one call rather than all of them. Not for a page that renders without interaction (scrape), and not for an interaction you can write out in advance — that is one scrape_with_actions call.
+
+        Costs 3 credits plus Priced per operation, not per call: open 3, read 2, and snapshot, act, screenshot, close and list 1 each. The published 3 is the ceiling — it is what an unrecognised operation costs and what is reserved before the body is read, and the charge drops to the operation's own price. A login-then-read flow (open, snapshot, act, act, read, close) costs 9.. Docs: https://www.crawlforge.dev/docs/api-reference/tools/browser-session
+        """
+        return self._run_tool(
+            "browser_session",
+            request,
+            {
+                "operation": operation,
+                "session_id": session_id,
+                "url": url,
+                "stealth": stealth,
+                "ttl": ttl,
+                "activity_ttl": activity_ttl,
+                "viewport": viewport,
+                "timeout": timeout,
+                "respect_robots": respect_robots,
+                "interactive_only": interactive_only,
+                "max_nodes": max_nodes,
+                "actions": actions,
+                "continue_on_error": continue_on_error,
+                "formats": formats,
+                "full_page": full_page,
+                "format": format,
+                "quality": quality,
+                "selector": selector,
                 "max_inline_chars": max_inline_chars,
                 "redact_pii": redact_pii,
             },
@@ -949,7 +1018,7 @@ class SyncToolsMixin:
         sort: Optional[Literal["asc", "desc"]] = None,
         source: Optional[Literal["auto", "arctic_shift", "pullpush", "web_discovery"]] = None,
     ) -> ToolResult:
-        """Search Reddit posts/comments or read a full comment thread — reads the Arctic Shift community archive (reddit.com blocks direct scraping). A scoped search (subreddit or author) queries the archive directly. A Reddit-wide keyword search finds posts with a site-restricted web search and then reads those posts from the archive — or, in comments mode, searches each of the first five posts' comments for the keywords — because Arctic Shift cannot keyword-search across all of Reddit. A scoped comment search Arctic Shift times out on is retried over the last 7d and 3d and reports window_applied. PullPush stopped serving automated clients in August 2026 and is no longer tried automatically.
+        """Search Reddit posts/comments or read a full comment thread — reads the Arctic Shift community archive (reddit.com blocks direct scraping). A scoped search (subreddit or author) queries the archive directly. A Reddit-wide keyword search finds posts with a site-restricted web search and then reads those posts from the archive — or, in comments mode, searches each of the first five posts' comments for the keywords — because Arctic Shift cannot keyword-search across all of Reddit. A scoped comment search Arctic Shift times out on is retried over the last 7d and 3d and reports window_applied. Arctic Shift is tried first and PullPush (api.pullpush.io) second: when Arctic Shift or the web-discovery path fails a posts or comments search, PullPush is queried and the response reports fallback_used. PullPush has refused automated clients since August 2026, so that fallback usually reports its refusal too.
 
         Costs 5 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/reddit-search
         """
@@ -1260,8 +1329,11 @@ class SyncToolsMixin:
         selector: Optional[str] = None,
         update_baseline: Optional[bool] = None,
         respect_robots: Optional[bool] = None,
+        schedule: Optional[str] = None,
+        notify_emails: Optional[List[str]] = None,
+        webhook_url: Optional[str] = None,
     ) -> ToolResult:
-        """Detect content changes on a page by comparing it against a stored baseline (create_baseline, then compare)
+        """Detect content changes on a page by comparing it against a stored baseline (create_baseline, then compare), or create a hosted monitor that checks it on a schedule (monitor)
 
         Costs 3 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/track-changes
         """
@@ -1274,6 +1346,9 @@ class SyncToolsMixin:
                 "selector": selector,
                 "update_baseline": update_baseline,
                 "respect_robots": respect_robots,
+                "schedule": schedule,
+                "notify_emails": notify_emails,
+                "webhook_url": webhook_url,
             },
         )
 
@@ -1376,6 +1451,63 @@ class AsyncToolsMixin:
                 "extraction_template": extraction_template,
                 "output_config": output_config,
                 "options": options,
+                "max_inline_chars": max_inline_chars,
+                "redact_pii": redact_pii,
+            },
+        )
+
+    async def browser_session(
+        self,
+        request: Optional[Union[BrowserSessionRequest, Dict[str, Any]]] = None,
+        /,
+        *,
+        operation: Optional[Literal["open", "snapshot", "act", "read", "screenshot", "close", "list"]] = None,
+        session_id: Optional[str] = None,
+        url: Optional[str] = None,
+        stealth: Optional[bool] = None,
+        ttl: Optional[float] = None,
+        activity_ttl: Optional[float] = None,
+        viewport: Optional[Union[BrowserSessionRequestViewport, Dict[str, Any]]] = None,
+        timeout: Optional[float] = None,
+        respect_robots: Optional[bool] = None,
+        interactive_only: Optional[bool] = None,
+        max_nodes: Optional[float] = None,
+        actions: Optional[List[Union[BrowserSessionRequestActionsItem, Dict[str, Any]]]] = None,
+        continue_on_error: Optional[bool] = None,
+        formats: Optional[List[Any]] = None,
+        full_page: Optional[bool] = None,
+        format: Optional[Literal["png", "jpeg"]] = None,
+        quality: Optional[float] = None,
+        selector: Optional[str] = None,
+        max_inline_chars: Optional[float] = None,
+        redact_pii: Optional[Union[bool, BrowserSessionRequestRedactPii, Dict[str, Any]]] = None,
+    ) -> ToolResult:
+        """Drive a browser across several calls, keeping the page, its cookies and its login in between. The loop is: open a session on a URL, snapshot it to list the interactive elements as refs (@e1, @e2 ...), act on those refs, read the content, close. Because the page stays open you can look before each step instead of committing to a whole chain up front, so a wrong selector costs one call rather than all of them. Not for a page that renders without interaction (scrape), and not for an interaction you can write out in advance — that is one scrape_with_actions call.
+
+        Costs 3 credits plus Priced per operation, not per call: open 3, read 2, and snapshot, act, screenshot, close and list 1 each. The published 3 is the ceiling — it is what an unrecognised operation costs and what is reserved before the body is read, and the charge drops to the operation's own price. A login-then-read flow (open, snapshot, act, act, read, close) costs 9.. Docs: https://www.crawlforge.dev/docs/api-reference/tools/browser-session
+        """
+        return await self._run_tool(
+            "browser_session",
+            request,
+            {
+                "operation": operation,
+                "session_id": session_id,
+                "url": url,
+                "stealth": stealth,
+                "ttl": ttl,
+                "activity_ttl": activity_ttl,
+                "viewport": viewport,
+                "timeout": timeout,
+                "respect_robots": respect_robots,
+                "interactive_only": interactive_only,
+                "max_nodes": max_nodes,
+                "actions": actions,
+                "continue_on_error": continue_on_error,
+                "formats": formats,
+                "full_page": full_page,
+                "format": format,
+                "quality": quality,
+                "selector": selector,
                 "max_inline_chars": max_inline_chars,
                 "redact_pii": redact_pii,
             },
@@ -1919,7 +2051,7 @@ class AsyncToolsMixin:
         sort: Optional[Literal["asc", "desc"]] = None,
         source: Optional[Literal["auto", "arctic_shift", "pullpush", "web_discovery"]] = None,
     ) -> ToolResult:
-        """Search Reddit posts/comments or read a full comment thread — reads the Arctic Shift community archive (reddit.com blocks direct scraping). A scoped search (subreddit or author) queries the archive directly. A Reddit-wide keyword search finds posts with a site-restricted web search and then reads those posts from the archive — or, in comments mode, searches each of the first five posts' comments for the keywords — because Arctic Shift cannot keyword-search across all of Reddit. A scoped comment search Arctic Shift times out on is retried over the last 7d and 3d and reports window_applied. PullPush stopped serving automated clients in August 2026 and is no longer tried automatically.
+        """Search Reddit posts/comments or read a full comment thread — reads the Arctic Shift community archive (reddit.com blocks direct scraping). A scoped search (subreddit or author) queries the archive directly. A Reddit-wide keyword search finds posts with a site-restricted web search and then reads those posts from the archive — or, in comments mode, searches each of the first five posts' comments for the keywords — because Arctic Shift cannot keyword-search across all of Reddit. A scoped comment search Arctic Shift times out on is retried over the last 7d and 3d and reports window_applied. Arctic Shift is tried first and PullPush (api.pullpush.io) second: when Arctic Shift or the web-discovery path fails a posts or comments search, PullPush is queried and the response reports fallback_used. PullPush has refused automated clients since August 2026, so that fallback usually reports its refusal too.
 
         Costs 5 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/reddit-search
         """
@@ -2230,8 +2362,11 @@ class AsyncToolsMixin:
         selector: Optional[str] = None,
         update_baseline: Optional[bool] = None,
         respect_robots: Optional[bool] = None,
+        schedule: Optional[str] = None,
+        notify_emails: Optional[List[str]] = None,
+        webhook_url: Optional[str] = None,
     ) -> ToolResult:
-        """Detect content changes on a page by comparing it against a stored baseline (create_baseline, then compare)
+        """Detect content changes on a page by comparing it against a stored baseline (create_baseline, then compare), or create a hosted monitor that checks it on a schedule (monitor)
 
         Costs 3 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/track-changes
         """
@@ -2244,5 +2379,8 @@ class AsyncToolsMixin:
                 "selector": selector,
                 "update_baseline": update_baseline,
                 "respect_robots": respect_robots,
+                "schedule": schedule,
+                "notify_emails": notify_emails,
+                "webhook_url": webhook_url,
             },
         )
