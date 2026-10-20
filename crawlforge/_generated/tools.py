@@ -72,8 +72,8 @@ from crawlforge.types import ToolResult, ToolSpec
 TOOLS: Dict[str, ToolSpec] = {
     "agent": ToolSpec(
         name="agent",
-        credits=8,
-        credits_note=None,
+        credits=18,
+        credits_note="8 per run, plus 5 for each walled page (challenge, 403/429, empty shell, timeout) the agent gets by retrying it in a stealth browser, at most 2 a run; a retry blocked again is free. The published 18 is the ceiling reserved before the run; the charge is what ran, and the response reports it as credits_used.",
         docs_url="https://www.crawlforge.dev/docs/api-reference/tools/agent",
         summary="Autonomous research/extraction from a natural-language prompt \u2014 no URLs required. Plans search queries, fetches and filters relevant pages, and returns a prose or structured answer under hard safety caps. Agent runs can exceed the REST API's ~50s window (the MCP tool allows 120s) \u2014 keep maxSteps/maxUrls small, or use the CrawlForge MCP server for long runs.",
         request_model=AgentRequest,
@@ -99,7 +99,7 @@ TOOLS: Dict[str, ToolSpec] = {
         credits=3,
         credits_note="Priced per operation, not per call: open 3, read 2, and snapshot, act, screenshot, close and list 1 each. The published 3 is the ceiling \u2014 it is what an unrecognised operation costs and what is reserved before the body is read, and the charge drops to the operation's own price. A login-then-read flow (open, snapshot, act, act, read, close) costs 9.",
         docs_url="https://www.crawlforge.dev/docs/api-reference/tools/browser-session",
-        summary="Drive a browser across several calls, keeping the page, its cookies and its login in between. The loop is: open a session on a URL, snapshot it to list the interactive elements as refs (@e1, @e2 ...), act on those refs, read the content, close. Because the page stays open you can look before each step instead of committing to a whole chain up front, so a wrong selector costs one call rather than all of them. Not for a page that renders without interaction (scrape), and not for an interaction you can write out in advance \u2014 that is one scrape_with_actions call.",
+        summary="Drive a browser across several calls, keeping the page, its cookies and its login in between. The loop is: open a session on a URL, snapshot it to list the interactive elements as refs (@e1, @e2 ...), act on those refs, read the content (the whole page by default, onlyMainContent: true for the main article block alone), close. Because the page stays open you can look before each step instead of committing to a whole chain up front, so a wrong selector costs one call rather than all of them. Not for a page that renders without interaction (scrape), and not for an interaction you can write out in advance \u2014 that is one scrape_with_actions call.",
         request_model=BrowserSessionRequest,
     ),
     "crawl_deep": ToolSpec(
@@ -115,7 +115,7 @@ TOOLS: Dict[str, ToolSpec] = {
         credits=10,
         credits_note=None,
         docs_url="https://www.crawlforge.dev/docs/api-reference/tools/deep-research",
-        summary="Multi-query web research: runs Google searches, fetches the top sources, and returns the most relevant passages verbatim with citations. Synthesis is extractive (no LLM on the hosted API) \u2014 for LLM-synthesized research use the CrawlForge MCP server.",
+        summary="Multi-query web research: runs web searches, fetches the top sources, and returns the most relevant passages verbatim with citations. Synthesis is extractive (no LLM on the hosted API) \u2014 for LLM-synthesized research use the CrawlForge MCP server.",
         request_model=DeepResearchRequest,
     ),
     "extract_content": ToolSpec(
@@ -131,7 +131,7 @@ TOOLS: Dict[str, ToolSpec] = {
         credits=2,
         credits_note=None,
         docs_url="https://www.crawlforge.dev/docs/api-reference/tools/extract-embedded-state",
-        summary="Return the JSON state a page already ships in its own HTML: __NEXT_DATA__, React Server Component flight chunks (self.__next_f), __NUXT__, __APOLLO_STATE__, __INITIAL_STATE__, __PRELOADED_STATE__ and <script type=\"application/json\"> blocks. One fetch, exact values, and no LLM in the extraction path \u2014 the numbers come from the site's own serialized state, so they cannot be fabricated. Sources are reported in \"found\" with their sizes; use \"path\" to return one subtree instead of a multi-megabyte blob. Results are never truncated.",
+        summary="Return the JSON state a page already ships in its own HTML: __NEXT_DATA__, React Server Component flight chunks (self.__next_f, \"$<id>\" references between rows resolved, plus a data_rows index of the rows carrying data), __NUXT__ and Nuxt 3's __NUXT_DATA__ (decoded), SvelteKit kit.start data, __APOLLO_STATE__, __INITIAL_STATE__, __PRELOADED_STATE__, ytInitialData, ytInitialPlayerResponse, __remixContext and other window globals (JSON, or a JavaScript literal evaluated statically \u2014 no page code runs), Inertia data-page, Shopify meta and product JSON, JSON data-* attributes and <script type=\"application/json\"> blocks. One fetch, exact values, and no LLM in the extraction path \u2014 the numbers come from the site's own serialized state, so they cannot be fabricated. Sources are reported in \"found\" with their sizes; use \"path\" to return one subtree instead of a multi-megabyte blob, keys_only to see its shape first, or find to list the paths of one key. A bot-defence wall or an empty shell carrying no state returns success: false, unbilled; with escalate: true the same call renders the page once in a stealth browser and reads the state from that instead.",
         request_model=ExtractEmbeddedStateRequest,
     ),
     "extract_links": ToolSpec(
@@ -139,7 +139,7 @@ TOOLS: Dict[str, ToolSpec] = {
         credits=1,
         credits_note=None,
         docs_url="https://www.crawlforge.dev/docs/api-reference/tools/extract-links",
-        summary="Extract and analyze all links from HTML content",
+        summary="Extract and analyze all links from HTML content. A url is fetched once (15 s timeout; a 429 or 503 whose Retry-After is 10 s or less is retried once after that wait). A PDF or other binary returns 415 UNSUPPORTED_CONTENT_TYPE with next_step process_document; a JSON body returns no links and a warning. A bot wall is a BLOCKED error, unbilled; with escalate: true the same call renders the page once in a stealth browser and reads the links from that instead. An empty client-side shell succeeds with rendered: false and the warning \"page renders client-side; use scrape\".",
         request_model=ExtractLinksRequest,
     ),
     "extract_metadata": ToolSpec(
@@ -163,7 +163,7 @@ TOOLS: Dict[str, ToolSpec] = {
         credits=1,
         credits_note=None,
         docs_url="https://www.crawlforge.dev/docs/api-reference/tools/extract-text",
-        summary="Extract clean text content from HTML with various formatting options",
+        summary="Extract clean text content from HTML with various formatting options. A url is fetched once (15 s timeout; a 429 or 503 whose Retry-After is 10 s or less is retried once after that wait). A PDF or other binary returns 415 UNSUPPORTED_CONTENT_TYPE with next_step process_document; a JSON body is returned as text with a warning. A bot wall is a BLOCKED error, unbilled; with escalate: true the same call renders the page once in a stealth browser and extracts the text from that instead. An empty client-side shell succeeds with rendered: false and the warning \"page renders client-side; use scrape\".",
         request_model=ExtractTextRequest,
     ),
     "extract_with_llm": ToolSpec(
@@ -211,7 +211,7 @@ TOOLS: Dict[str, ToolSpec] = {
         credits=2,
         credits_note=None,
         docs_url="https://www.crawlforge.dev/docs/api-reference/tools/localization",
-        summary="Multi-language and geo-location management for international content",
+        summary="Audit the language and region signals of one page: html lang, the Content-Language header, hreflang alternates, the language detected in the visible text, and geo meta tags. It reads that page and applies nothing to any other call: target_language and target_country shape this one request only. No proxy is used, so the request leaves from the same address as every other tool and a geo-block is not lifted (a regional block follows the exit IP). To request a page in a language elsewhere, pass it on that call: fetch_url headers {\"Accept-Language\": ...} or stealth_mode stealthConfig {locale, timezone}; scrape has no locale parameter. The CrawlForge MCP server's localization tool is a different surface (configure_country and other operations) that returns a country's locale values and likewise applies none.",
         request_model=LocalizationRequest,
     ),
     "map_site": ToolSpec(
@@ -251,7 +251,7 @@ TOOLS: Dict[str, ToolSpec] = {
         credits=2,
         credits_note=None,
         docs_url="https://www.crawlforge.dev/docs/api-reference/tools/scrape",
-        summary="Unified single-fetch, multi-format extraction. One fetch serves every requested format: markdown, html, rawHtml, text, links, metadata. A bot-defence challenge page returns success: false with blocked.vendor whatever its HTTP status; an empty shell or an error placeholder served as HTTP 200 is a failure too. Neither is charged. With escalate: true that same call renders the page once in a stealth browser and returns the formats from it, instead of returning the block.",
+        summary="Unified single-fetch, multi-format extraction. One fetch serves every requested format: markdown, html, rawHtml, text, links, metadata. A bot-defence challenge page returns success: false with blocked.vendor whatever its HTTP status; an empty shell or an error placeholder served as HTTP 200 is a failure too. Neither is charged. A PDF or other binary returns 415 UNSUPPORTED_CONTENT_TYPE, unbilled; use process_document. A success whose markdown is empty carries a warning saying so. With escalate: true that same call renders the page once in a stealth browser and returns the formats from it, instead of returning the block.",
         request_model=ScrapeRequest,
     ),
     "scrape_structured": ToolSpec(
@@ -275,7 +275,7 @@ TOOLS: Dict[str, ToolSpec] = {
         credits=5,
         credits_note=None,
         docs_url="https://www.crawlforge.dev/docs/api-reference/tools/scrape-with-actions",
-        summary="Interact with a page before scraping \u2014 click, type, press keys, hover, choose a select option, scroll, navigate on, run JavaScript, or wait for dynamic content. Use for SPAs, login-gated content, or multi-step flows. Set browserOptions.stealth to run the chain in a stealth browser context.",
+        summary="Interact with a page before scraping \u2014 click, type, press keys, hover, choose a select option, scroll, navigate on, run JavaScript, or wait for dynamic content. Use for SPAs, login-gated content, or multi-step flows. Set browserOptions.stealth to run the chain in a stealth browser context. A click or form submit that loads another page is a navigation too: it gets its own navigations entry (trigger names the action type), and finalUrl is where the chain ended. Screenshots are taken by {type:\"screenshot\"} actions (and on error) and stored as crawlforge://screenshot/{actionId} resources.",
         request_model=ScrapeWithActionsRequest,
     ),
     "search_web": ToolSpec(
@@ -283,7 +283,7 @@ TOOLS: Dict[str, ToolSpec] = {
         credits=5,
         credits_note=None,
         docs_url="https://www.crawlforge.dev/docs/api-reference/tools/search-web",
-        summary="Search the web using Google Custom Search API. One query per call, or up to 10 in a single call with queries.",
+        summary="Search the live web (Brave Search API) and get ranked results as JSON. One query per call, or up to 10 in a single call with queries.",
         request_model=SearchWebRequest,
     ),
     "serp_rank": ToolSpec(
@@ -291,7 +291,7 @@ TOOLS: Dict[str, ToolSpec] = {
         credits=5,
         credits_note=None,
         docs_url="https://www.crawlforge.dev/docs/api-reference/tools/serp-rank",
-        summary="Check a domain's organic position in Google search results for a keyword (powered by DataForSEO)",
+        summary="Check a domain's organic position in Google search results for a keyword (powered by DataForSEO). One lookup is one sample: Google can return a different result set for the same query minutes apart, so compare several lookups before reading a change in rank. A result set that barely mentions the keyword, a likely decoy page, comes back with suspect: true and a warning",
         request_model=SerpRankRequest,
     ),
     "stealth_mode": ToolSpec(
@@ -299,7 +299,7 @@ TOOLS: Dict[str, ToolSpec] = {
         credits=5,
         credits_note=None,
         docs_url="https://www.crawlforge.dev/docs/api-reference/tools/stealth-mode",
-        summary="Stealth browser scraping for sites that block normal scrapers (Cloudflare, DataDome, bot detection). Use operation \"scrape\" for a one-call render of a single URL; create_context \u2192 create_page \u2192 cleanup remains for multi-step work that reuses one context.",
+        summary="Stealth browser scraping for sites that block normal scrapers (Cloudflare, DataDome, bot detection). Use operation \"scrape\" for a one-call render of a single URL. create_context then create_page is a navigation and challenge check: create_page loads urlToTest, reports its status, title and any challenge page, and closes the page before the call returns, so nothing on it carries over to a later call. For work over several calls on one page (log in, then read; click, then read), use browser_session with stealth: true. Operation \"configure\" only validates a stealthConfig and returns it with the defaults filled in \u2014 it stores nothing, so pass stealthConfig on each scrape or create_context call that should use it.",
         request_model=StealthModeRequest,
     ),
     "summarize_content": ToolSpec(
@@ -339,10 +339,11 @@ class SyncToolsMixin:
         model: Optional[Literal["default", "pro"]] = None,
         maxSteps: Optional[float] = None,
         maxUrls: Optional[float] = None,
+        max_inline_chars: Optional[float] = None,
     ) -> ToolResult:
         """Autonomous research/extraction from a natural-language prompt — no URLs required. Plans search queries, fetches and filters relevant pages, and returns a prose or structured answer under hard safety caps. Agent runs can exceed the REST API's ~50s window (the MCP tool allows 120s) — keep maxSteps/maxUrls small, or use the CrawlForge MCP server for long runs.
 
-        Costs 8 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/agent
+        Costs 18 credits plus 8 per run, plus 5 for each walled page (challenge, 403/429, empty shell, timeout) the agent gets by retrying it in a stealth browser, at most 2 a run; a retry blocked again is free. The published 18 is the ceiling reserved before the run; the charge is what ran, and the response reports it as credits_used.. Docs: https://www.crawlforge.dev/docs/api-reference/tools/agent
         """
         return self._run_tool(
             "agent",
@@ -354,6 +355,7 @@ class SyncToolsMixin:
                 "model": model,
                 "maxSteps": maxSteps,
                 "maxUrls": maxUrls,
+                "max_inline_chars": max_inline_chars,
             },
         )
 
@@ -442,6 +444,7 @@ class SyncToolsMixin:
         actions: Optional[List[Union[BrowserSessionRequestActionsItem, Dict[str, Any]]]] = None,
         continue_on_error: Optional[bool] = None,
         formats: Optional[List[Any]] = None,
+        onlyMainContent: Optional[bool] = None,
         full_page: Optional[bool] = None,
         format: Optional[Literal["png", "jpeg"]] = None,
         quality: Optional[float] = None,
@@ -449,7 +452,7 @@ class SyncToolsMixin:
         max_inline_chars: Optional[float] = None,
         redact_pii: Optional[Union[bool, BrowserSessionRequestRedactPii, Dict[str, Any]]] = None,
     ) -> ToolResult:
-        """Drive a browser across several calls, keeping the page, its cookies and its login in between. The loop is: open a session on a URL, snapshot it to list the interactive elements as refs (@e1, @e2 ...), act on those refs, read the content, close. Because the page stays open you can look before each step instead of committing to a whole chain up front, so a wrong selector costs one call rather than all of them. Not for a page that renders without interaction (scrape), and not for an interaction you can write out in advance — that is one scrape_with_actions call.
+        """Drive a browser across several calls, keeping the page, its cookies and its login in between. The loop is: open a session on a URL, snapshot it to list the interactive elements as refs (@e1, @e2 ...), act on those refs, read the content (the whole page by default, onlyMainContent: true for the main article block alone), close. Because the page stays open you can look before each step instead of committing to a whole chain up front, so a wrong selector costs one call rather than all of them. Not for a page that renders without interaction (scrape), and not for an interaction you can write out in advance — that is one scrape_with_actions call.
 
         Costs 3 credits plus Priced per operation, not per call: open 3, read 2, and snapshot, act, screenshot, close and list 1 each. The published 3 is the ceiling — it is what an unrecognised operation costs and what is reserved before the body is read, and the charge drops to the operation's own price. A login-then-read flow (open, snapshot, act, act, read, close) costs 9.. Docs: https://www.crawlforge.dev/docs/api-reference/tools/browser-session
         """
@@ -471,6 +474,7 @@ class SyncToolsMixin:
                 "actions": actions,
                 "continue_on_error": continue_on_error,
                 "formats": formats,
+                "onlyMainContent": onlyMainContent,
                 "full_page": full_page,
                 "format": format,
                 "quality": quality,
@@ -528,7 +532,7 @@ class SyncToolsMixin:
         respect_robots: Optional[bool] = None,
         max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
-        """Multi-query web research: runs Google searches, fetches the top sources, and returns the most relevant passages verbatim with citations. Synthesis is extractive (no LLM on the hosted API) — for LLM-synthesized research use the CrawlForge MCP server.
+        """Multi-query web research: runs web searches, fetches the top sources, and returns the most relevant passages verbatim with citations. Synthesis is extractive (no LLM on the hosted API) — for LLM-synthesized research use the CrawlForge MCP server.
 
         Costs 10 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/deep-research
         """
@@ -589,9 +593,15 @@ class SyncToolsMixin:
         user_agent: Optional[str] = None,
         respect_robots: Optional[bool] = None,
         timeout: Optional[int] = None,
+        keys_only: Optional[bool] = None,
+        find: Optional[str] = None,
+        raw: Optional[bool] = None,
+        escalate: Optional[bool] = None,
+        escalate_engine: Optional[Literal["playwright", "camoufox"]] = None,
+        wait_for: Optional[int] = None,
         max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
-        """Return the JSON state a page already ships in its own HTML: __NEXT_DATA__, React Server Component flight chunks (self.__next_f), __NUXT__, __APOLLO_STATE__, __INITIAL_STATE__, __PRELOADED_STATE__ and <script type="application/json"> blocks. One fetch, exact values, and no LLM in the extraction path — the numbers come from the site's own serialized state, so they cannot be fabricated. Sources are reported in "found" with their sizes; use "path" to return one subtree instead of a multi-megabyte blob. Results are never truncated.
+        """Return the JSON state a page already ships in its own HTML: __NEXT_DATA__, React Server Component flight chunks (self.__next_f, "$<id>" references between rows resolved, plus a data_rows index of the rows carrying data), __NUXT__ and Nuxt 3's __NUXT_DATA__ (decoded), SvelteKit kit.start data, __APOLLO_STATE__, __INITIAL_STATE__, __PRELOADED_STATE__, ytInitialData, ytInitialPlayerResponse, __remixContext and other window globals (JSON, or a JavaScript literal evaluated statically — no page code runs), Inertia data-page, Shopify meta and product JSON, JSON data-* attributes and <script type="application/json"> blocks. One fetch, exact values, and no LLM in the extraction path — the numbers come from the site's own serialized state, so they cannot be fabricated. Sources are reported in "found" with their sizes; use "path" to return one subtree instead of a multi-megabyte blob, keys_only to see its shape first, or find to list the paths of one key. A bot-defence wall or an empty shell carrying no state returns success: false, unbilled; with escalate: true the same call renders the page once in a stealth browser and reads the state from that instead.
 
         Costs 2 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/extract-embedded-state
         """
@@ -604,6 +614,12 @@ class SyncToolsMixin:
                 "user_agent": user_agent,
                 "respect_robots": respect_robots,
                 "timeout": timeout,
+                "keys_only": keys_only,
+                "find": find,
+                "raw": raw,
+                "escalate": escalate,
+                "escalate_engine": escalate_engine,
+                "wait_for": wait_for,
                 "max_inline_chars": max_inline_chars,
             },
         )
@@ -619,12 +635,16 @@ class SyncToolsMixin:
         filter_domains: Optional[List[str]] = None,
         include_external: Optional[bool] = None,
         include_internal: Optional[bool] = None,
+        filter_external: Optional[bool] = None,
         include_anchors: Optional[bool] = None,
         deduplicate: Optional[bool] = None,
         include_metadata: Optional[bool] = None,
         respect_robots: Optional[bool] = None,
+        escalate: Optional[bool] = None,
+        escalate_engine: Optional[Literal["playwright", "camoufox"]] = None,
+        max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
-        """Extract and analyze all links from HTML content
+        """Extract and analyze all links from HTML content. A url is fetched once (15 s timeout; a 429 or 503 whose Retry-After is 10 s or less is retried once after that wait). A PDF or other binary returns 415 UNSUPPORTED_CONTENT_TYPE with next_step process_document; a JSON body returns no links and a warning. A bot wall is a BLOCKED error, unbilled; with escalate: true the same call renders the page once in a stealth browser and reads the links from that instead. An empty client-side shell succeeds with rendered: false and the warning "page renders client-side; use scrape".
 
         Costs 1 credit. Docs: https://www.crawlforge.dev/docs/api-reference/tools/extract-links
         """
@@ -638,10 +658,14 @@ class SyncToolsMixin:
                 "filter_domains": filter_domains,
                 "include_external": include_external,
                 "include_internal": include_internal,
+                "filter_external": filter_external,
                 "include_anchors": include_anchors,
                 "deduplicate": deduplicate,
                 "include_metadata": include_metadata,
                 "respect_robots": respect_robots,
+                "escalate": escalate,
+                "escalate_engine": escalate_engine,
+                "max_inline_chars": max_inline_chars,
             },
         )
 
@@ -657,6 +681,7 @@ class SyncToolsMixin:
         include_technical: Optional[bool] = None,
         include_structured_data: Optional[bool] = None,
         respect_robots: Optional[bool] = None,
+        max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
         """Extract comprehensive metadata from HTML including SEO, social, and technical information
 
@@ -673,6 +698,7 @@ class SyncToolsMixin:
                 "include_technical": include_technical,
                 "include_structured_data": include_structured_data,
                 "respect_robots": respect_robots,
+                "max_inline_chars": max_inline_chars,
             },
         )
 
@@ -719,10 +745,13 @@ class SyncToolsMixin:
         preserve_links: Optional[bool] = None,
         preserve_formatting: Optional[bool] = None,
         max_length: Optional[float] = None,
+        output_format: Optional[Literal["text", "markdown"]] = None,
         respect_robots: Optional[bool] = None,
+        escalate: Optional[bool] = None,
+        escalate_engine: Optional[Literal["playwright", "camoufox"]] = None,
         redact_pii: Optional[Union[bool, ExtractTextRequestRedactPii, Dict[str, Any]]] = None,
     ) -> ToolResult:
-        """Extract clean text content from HTML with various formatting options
+        """Extract clean text content from HTML with various formatting options. A url is fetched once (15 s timeout; a 429 or 503 whose Retry-After is 10 s or less is retried once after that wait). A PDF or other binary returns 415 UNSUPPORTED_CONTENT_TYPE with next_step process_document; a JSON body is returned as text with a warning. A bot wall is a BLOCKED error, unbilled; with escalate: true the same call renders the page once in a stealth browser and extracts the text from that instead. An empty client-side shell succeeds with rendered: false and the warning "page renders client-side; use scrape".
 
         Costs 1 credit. Docs: https://www.crawlforge.dev/docs/api-reference/tools/extract-text
         """
@@ -737,7 +766,10 @@ class SyncToolsMixin:
                 "preserve_links": preserve_links,
                 "preserve_formatting": preserve_formatting,
                 "max_length": max_length,
+                "output_format": output_format,
                 "respect_robots": respect_robots,
+                "escalate": escalate,
+                "escalate_engine": escalate_engine,
                 "redact_pii": redact_pii,
             },
         )
@@ -815,6 +847,7 @@ class SyncToolsMixin:
         complianceLevel: Optional[Literal["basic", "standard", "strict"]] = None,
         analysisOptions: Optional[Union[GenerateLlmsTxtRequestAnalysisOptions, Dict[str, Any]]] = None,
         outputOptions: Optional[Union[GenerateLlmsTxtRequestOutputOptions, Dict[str, Any]]] = None,
+        max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
         """Generate llms.txt (and optionally llms-full.txt) from a real analysis of the site: fetches the target page, robots.txt, and sitemap.xml, then reads up to 8 key same-domain pages (about/docs/pricing/blog/api/contact/faq and similar) for their titles, descriptions, and main text.
 
@@ -830,6 +863,7 @@ class SyncToolsMixin:
                 "complianceLevel": complianceLevel,
                 "analysisOptions": analysisOptions,
                 "outputOptions": outputOptions,
+                "max_inline_chars": max_inline_chars,
             },
         )
 
@@ -886,7 +920,7 @@ class SyncToolsMixin:
         timeout: Optional[float] = None,
         respect_robots: Optional[bool] = None,
     ) -> ToolResult:
-        """Multi-language and geo-location management for international content
+        """Audit the language and region signals of one page: html lang, the Content-Language header, hreflang alternates, the language detected in the visible text, and geo meta tags. It reads that page and applies nothing to any other call: target_language and target_country shape this one request only. No proxy is used, so the request leaves from the same address as every other tool and a geo-block is not lifted (a regional block follows the exit IP). To request a page in a language elsewhere, pass it on that call: fetch_url headers {"Accept-Language": ...} or stealth_mode stealthConfig {locale, timezone}; scrape has no locale parameter. The CrawlForge MCP server's localization tool is a different surface (configure_country and other operations) that returns a country's locale values and likewise applies none.
 
         Costs 2 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/localization
         """
@@ -915,6 +949,7 @@ class SyncToolsMixin:
         max_depth: Optional[float] = None,
         include_external: Optional[bool] = None,
         timeout: Optional[float] = None,
+        max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
         """Enumerate a site's pages: reads {origin}/sitemap.xml when available (up to 500 URLs, following up to 3 child sitemaps), otherwise falls back to a bounded breadth-first crawl (up to 30 pages, ~18s budget)
 
@@ -929,6 +964,7 @@ class SyncToolsMixin:
                 "max_depth": max_depth,
                 "include_external": include_external,
                 "timeout": timeout,
+                "max_inline_chars": max_inline_chars,
             },
         )
 
@@ -1053,7 +1089,7 @@ class SyncToolsMixin:
         max_inline_chars: Optional[int] = None,
         redact_pii: Optional[Union[bool, ScrapeRequestRedactPii, Dict[str, Any]]] = None,
     ) -> ToolResult:
-        """Unified single-fetch, multi-format extraction. One fetch serves every requested format: markdown, html, rawHtml, text, links, metadata. A bot-defence challenge page returns success: false with blocked.vendor whatever its HTTP status; an empty shell or an error placeholder served as HTTP 200 is a failure too. Neither is charged. With escalate: true that same call renders the page once in a stealth browser and returns the formats from it, instead of returning the block.
+        """Unified single-fetch, multi-format extraction. One fetch serves every requested format: markdown, html, rawHtml, text, links, metadata. A bot-defence challenge page returns success: false with blocked.vendor whatever its HTTP status; an empty shell or an error placeholder served as HTTP 200 is a failure too. Neither is charged. A PDF or other binary returns 415 UNSUPPORTED_CONTENT_TYPE, unbilled; use process_document. A success whose markdown is empty carries a warning saying so. With escalate: true that same call renders the page once in a stealth browser and returns the formats from it, instead of returning the block.
 
         Costs 2 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/scrape
         """
@@ -1117,6 +1153,7 @@ class SyncToolsMixin:
         params: Optional[Dict[str, Any]] = None,
         respect_robots: Optional[bool] = None,
         timeout: Optional[int] = None,
+        max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
         """Pre-built scrapers for popular sites and public APIs — no schema or selectors required. Three modes: name a template and pass a URL; pass template "auto" with a URL to have the matching template picked (the response reports which one it chose); or pass template "list" to enumerate them. Templates come in two kinds, reported as "mode" by the list. An entity template returns one record from one page. A list connector returns N records from one call, as data.items with a data.count — that covers the job-board group (Greenhouse, Lever, Ashby, Workable, Recruitee, Teamtailor), which reads a company's whole board from its ATS API, the government group (NHTSA vPIC VIN decoding, NPPES NPI provider registry), which reads free keyless federal registries, and shopify-collection, which lists a whole storefront collection. A list connector is driven either by a URL or by "params" — e.g. { "template": "greenhouse-jobs", "params": { "company": "stripe" } }. Sites that block plain HTTP fetches (e.g. Amazon) may return sparse data here; the CrawlForge MCP server version uses stealth browsing for those. reddit-thread reads the post from the Arctic Shift archive, because reddit.com blocks direct scraping; the reddit_search tool reads the comment tree. linkedin-profile and tweet are retired — those sites' robots.txt disallow every keyless path — and naming one, or passing one of their URLs to "auto", returns 400 TEMPLATE_UNAVAILABLE with the reason and no charge. Several templates read a machine-readable endpoint rather than the rendered page — shopify-product reads the store's own /products/<handle>.json, npm-package reads the npm registry API, and every list connector reads its platform's API — and report the URL they actually read as "fetched_url". When a Shopify store refuses its JSON endpoint (401, 403, 404 or 410), shopify-product reads the product page's own schema.org JSON-LD instead: the record carries "source": "json-ld" and a warning says so, with per-variant stock, compare-at prices and option names null because JSON-LD does not carry them.
 
@@ -1131,6 +1168,7 @@ class SyncToolsMixin:
                 "params": params,
                 "respect_robots": respect_robots,
                 "timeout": timeout,
+                "max_inline_chars": max_inline_chars,
             },
         )
 
@@ -1143,7 +1181,6 @@ class SyncToolsMixin:
         actions: Optional[List[Union[ScrapeWithActionsRequestActionsItem, Dict[str, Any]]]] = None,
         formats: Optional[List[Any]] = None,
         captureIntermediateStates: Optional[bool] = None,
-        captureScreenshots: Optional[bool] = None,
         formAutoFill: Optional[Union[ScrapeWithActionsRequestFormAutoFill, Dict[str, Any]]] = None,
         browserOptions: Optional[Union[ScrapeWithActionsRequestBrowserOptions, Dict[str, Any]]] = None,
         respect_robots: Optional[bool] = None,
@@ -1154,7 +1191,7 @@ class SyncToolsMixin:
         max_inline_chars: Optional[float] = None,
         redact_pii: Optional[Union[bool, ScrapeWithActionsRequestRedactPii, Dict[str, Any]]] = None,
     ) -> ToolResult:
-        """Interact with a page before scraping — click, type, press keys, hover, choose a select option, scroll, navigate on, run JavaScript, or wait for dynamic content. Use for SPAs, login-gated content, or multi-step flows. Set browserOptions.stealth to run the chain in a stealth browser context.
+        """Interact with a page before scraping — click, type, press keys, hover, choose a select option, scroll, navigate on, run JavaScript, or wait for dynamic content. Use for SPAs, login-gated content, or multi-step flows. Set browserOptions.stealth to run the chain in a stealth browser context. A click or form submit that loads another page is a navigation too: it gets its own navigations entry (trigger names the action type), and finalUrl is where the chain ended. Screenshots are taken by {type:"screenshot"} actions (and on error) and stored as crawlforge://screenshot/{actionId} resources.
 
         Costs 5 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/scrape-with-actions
         """
@@ -1166,7 +1203,6 @@ class SyncToolsMixin:
                 "actions": actions,
                 "formats": formats,
                 "captureIntermediateStates": captureIntermediateStates,
-                "captureScreenshots": captureScreenshots,
                 "formAutoFill": formAutoFill,
                 "browserOptions": browserOptions,
                 "respect_robots": respect_robots,
@@ -1194,8 +1230,9 @@ class SyncToolsMixin:
         time_range: Optional[Literal["day", "week", "month", "year", "all"]] = None,
         file_type: Optional[str] = None,
         redact_pii: Optional[Union[bool, SearchWebRequestRedactPii, Dict[str, Any]]] = None,
+        max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
-        """Search the web using Google Custom Search API. One query per call, or up to 10 in a single call with queries.
+        """Search the live web (Brave Search API) and get ranked results as JSON. One query per call, or up to 10 in a single call with queries.
 
         Costs 5 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/search-web
         """
@@ -1213,6 +1250,7 @@ class SyncToolsMixin:
                 "time_range": time_range,
                 "file_type": file_type,
                 "redact_pii": redact_pii,
+                "max_inline_chars": max_inline_chars,
             },
         )
 
@@ -1229,7 +1267,7 @@ class SyncToolsMixin:
         location_name: Optional[str] = None,
         location_code: Optional[float] = None,
     ) -> ToolResult:
-        """Check a domain's organic position in Google search results for a keyword (powered by DataForSEO)
+        """Check a domain's organic position in Google search results for a keyword (powered by DataForSEO). One lookup is one sample: Google can return a different result set for the same query minutes apart, so compare several lookups before reading a change in rank. A result set that barely mentions the keyword, a likely decoy page, comes back with suspect: true and a warning
 
         Costs 5 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/serp-rank
         """
@@ -1252,7 +1290,7 @@ class SyncToolsMixin:
         request: Optional[Union[StealthModeRequest, Dict[str, Any]]] = None,
         /,
         *,
-        operation: Optional[Literal["scrape", "configure", "enable", "disable", "create_context", "create_page", "get_stats", "cleanup"]] = None,
+        operation: Optional[Literal["scrape", "configure", "create_context", "create_page", "get_stats", "cleanup"]] = None,
         stealthConfig: Optional[Union[StealthModeRequestStealthConfig, Dict[str, Any]]] = None,
         engine: Optional[Literal["playwright", "camoufox"]] = None,
         contextId: Optional[str] = None,
@@ -1265,7 +1303,7 @@ class SyncToolsMixin:
         max_inline_chars: Optional[float] = None,
         redact_pii: Optional[Union[bool, StealthModeRequestRedactPii, Dict[str, Any]]] = None,
     ) -> ToolResult:
-        """Stealth browser scraping for sites that block normal scrapers (Cloudflare, DataDome, bot detection). Use operation "scrape" for a one-call render of a single URL; create_context → create_page → cleanup remains for multi-step work that reuses one context.
+        """Stealth browser scraping for sites that block normal scrapers (Cloudflare, DataDome, bot detection). Use operation "scrape" for a one-call render of a single URL. create_context then create_page is a navigation and challenge check: create_page loads urlToTest, reports its status, title and any challenge page, and closes the page before the call returns, so nothing on it carries over to a later call. For work over several calls on one page (log in, then read; click, then read), use browser_session with stealth: true. Operation "configure" only validates a stealthConfig and returns it with the defaults filled in — it stores nothing, so pass stealthConfig on each scrape or create_context call that should use it.
 
         Costs 5 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/stealth-mode
         """
@@ -1372,10 +1410,11 @@ class AsyncToolsMixin:
         model: Optional[Literal["default", "pro"]] = None,
         maxSteps: Optional[float] = None,
         maxUrls: Optional[float] = None,
+        max_inline_chars: Optional[float] = None,
     ) -> ToolResult:
         """Autonomous research/extraction from a natural-language prompt — no URLs required. Plans search queries, fetches and filters relevant pages, and returns a prose or structured answer under hard safety caps. Agent runs can exceed the REST API's ~50s window (the MCP tool allows 120s) — keep maxSteps/maxUrls small, or use the CrawlForge MCP server for long runs.
 
-        Costs 8 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/agent
+        Costs 18 credits plus 8 per run, plus 5 for each walled page (challenge, 403/429, empty shell, timeout) the agent gets by retrying it in a stealth browser, at most 2 a run; a retry blocked again is free. The published 18 is the ceiling reserved before the run; the charge is what ran, and the response reports it as credits_used.. Docs: https://www.crawlforge.dev/docs/api-reference/tools/agent
         """
         return await self._run_tool(
             "agent",
@@ -1387,6 +1426,7 @@ class AsyncToolsMixin:
                 "model": model,
                 "maxSteps": maxSteps,
                 "maxUrls": maxUrls,
+                "max_inline_chars": max_inline_chars,
             },
         )
 
@@ -1475,6 +1515,7 @@ class AsyncToolsMixin:
         actions: Optional[List[Union[BrowserSessionRequestActionsItem, Dict[str, Any]]]] = None,
         continue_on_error: Optional[bool] = None,
         formats: Optional[List[Any]] = None,
+        onlyMainContent: Optional[bool] = None,
         full_page: Optional[bool] = None,
         format: Optional[Literal["png", "jpeg"]] = None,
         quality: Optional[float] = None,
@@ -1482,7 +1523,7 @@ class AsyncToolsMixin:
         max_inline_chars: Optional[float] = None,
         redact_pii: Optional[Union[bool, BrowserSessionRequestRedactPii, Dict[str, Any]]] = None,
     ) -> ToolResult:
-        """Drive a browser across several calls, keeping the page, its cookies and its login in between. The loop is: open a session on a URL, snapshot it to list the interactive elements as refs (@e1, @e2 ...), act on those refs, read the content, close. Because the page stays open you can look before each step instead of committing to a whole chain up front, so a wrong selector costs one call rather than all of them. Not for a page that renders without interaction (scrape), and not for an interaction you can write out in advance — that is one scrape_with_actions call.
+        """Drive a browser across several calls, keeping the page, its cookies and its login in between. The loop is: open a session on a URL, snapshot it to list the interactive elements as refs (@e1, @e2 ...), act on those refs, read the content (the whole page by default, onlyMainContent: true for the main article block alone), close. Because the page stays open you can look before each step instead of committing to a whole chain up front, so a wrong selector costs one call rather than all of them. Not for a page that renders without interaction (scrape), and not for an interaction you can write out in advance — that is one scrape_with_actions call.
 
         Costs 3 credits plus Priced per operation, not per call: open 3, read 2, and snapshot, act, screenshot, close and list 1 each. The published 3 is the ceiling — it is what an unrecognised operation costs and what is reserved before the body is read, and the charge drops to the operation's own price. A login-then-read flow (open, snapshot, act, act, read, close) costs 9.. Docs: https://www.crawlforge.dev/docs/api-reference/tools/browser-session
         """
@@ -1504,6 +1545,7 @@ class AsyncToolsMixin:
                 "actions": actions,
                 "continue_on_error": continue_on_error,
                 "formats": formats,
+                "onlyMainContent": onlyMainContent,
                 "full_page": full_page,
                 "format": format,
                 "quality": quality,
@@ -1561,7 +1603,7 @@ class AsyncToolsMixin:
         respect_robots: Optional[bool] = None,
         max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
-        """Multi-query web research: runs Google searches, fetches the top sources, and returns the most relevant passages verbatim with citations. Synthesis is extractive (no LLM on the hosted API) — for LLM-synthesized research use the CrawlForge MCP server.
+        """Multi-query web research: runs web searches, fetches the top sources, and returns the most relevant passages verbatim with citations. Synthesis is extractive (no LLM on the hosted API) — for LLM-synthesized research use the CrawlForge MCP server.
 
         Costs 10 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/deep-research
         """
@@ -1622,9 +1664,15 @@ class AsyncToolsMixin:
         user_agent: Optional[str] = None,
         respect_robots: Optional[bool] = None,
         timeout: Optional[int] = None,
+        keys_only: Optional[bool] = None,
+        find: Optional[str] = None,
+        raw: Optional[bool] = None,
+        escalate: Optional[bool] = None,
+        escalate_engine: Optional[Literal["playwright", "camoufox"]] = None,
+        wait_for: Optional[int] = None,
         max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
-        """Return the JSON state a page already ships in its own HTML: __NEXT_DATA__, React Server Component flight chunks (self.__next_f), __NUXT__, __APOLLO_STATE__, __INITIAL_STATE__, __PRELOADED_STATE__ and <script type="application/json"> blocks. One fetch, exact values, and no LLM in the extraction path — the numbers come from the site's own serialized state, so they cannot be fabricated. Sources are reported in "found" with their sizes; use "path" to return one subtree instead of a multi-megabyte blob. Results are never truncated.
+        """Return the JSON state a page already ships in its own HTML: __NEXT_DATA__, React Server Component flight chunks (self.__next_f, "$<id>" references between rows resolved, plus a data_rows index of the rows carrying data), __NUXT__ and Nuxt 3's __NUXT_DATA__ (decoded), SvelteKit kit.start data, __APOLLO_STATE__, __INITIAL_STATE__, __PRELOADED_STATE__, ytInitialData, ytInitialPlayerResponse, __remixContext and other window globals (JSON, or a JavaScript literal evaluated statically — no page code runs), Inertia data-page, Shopify meta and product JSON, JSON data-* attributes and <script type="application/json"> blocks. One fetch, exact values, and no LLM in the extraction path — the numbers come from the site's own serialized state, so they cannot be fabricated. Sources are reported in "found" with their sizes; use "path" to return one subtree instead of a multi-megabyte blob, keys_only to see its shape first, or find to list the paths of one key. A bot-defence wall or an empty shell carrying no state returns success: false, unbilled; with escalate: true the same call renders the page once in a stealth browser and reads the state from that instead.
 
         Costs 2 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/extract-embedded-state
         """
@@ -1637,6 +1685,12 @@ class AsyncToolsMixin:
                 "user_agent": user_agent,
                 "respect_robots": respect_robots,
                 "timeout": timeout,
+                "keys_only": keys_only,
+                "find": find,
+                "raw": raw,
+                "escalate": escalate,
+                "escalate_engine": escalate_engine,
+                "wait_for": wait_for,
                 "max_inline_chars": max_inline_chars,
             },
         )
@@ -1652,12 +1706,16 @@ class AsyncToolsMixin:
         filter_domains: Optional[List[str]] = None,
         include_external: Optional[bool] = None,
         include_internal: Optional[bool] = None,
+        filter_external: Optional[bool] = None,
         include_anchors: Optional[bool] = None,
         deduplicate: Optional[bool] = None,
         include_metadata: Optional[bool] = None,
         respect_robots: Optional[bool] = None,
+        escalate: Optional[bool] = None,
+        escalate_engine: Optional[Literal["playwright", "camoufox"]] = None,
+        max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
-        """Extract and analyze all links from HTML content
+        """Extract and analyze all links from HTML content. A url is fetched once (15 s timeout; a 429 or 503 whose Retry-After is 10 s or less is retried once after that wait). A PDF or other binary returns 415 UNSUPPORTED_CONTENT_TYPE with next_step process_document; a JSON body returns no links and a warning. A bot wall is a BLOCKED error, unbilled; with escalate: true the same call renders the page once in a stealth browser and reads the links from that instead. An empty client-side shell succeeds with rendered: false and the warning "page renders client-side; use scrape".
 
         Costs 1 credit. Docs: https://www.crawlforge.dev/docs/api-reference/tools/extract-links
         """
@@ -1671,10 +1729,14 @@ class AsyncToolsMixin:
                 "filter_domains": filter_domains,
                 "include_external": include_external,
                 "include_internal": include_internal,
+                "filter_external": filter_external,
                 "include_anchors": include_anchors,
                 "deduplicate": deduplicate,
                 "include_metadata": include_metadata,
                 "respect_robots": respect_robots,
+                "escalate": escalate,
+                "escalate_engine": escalate_engine,
+                "max_inline_chars": max_inline_chars,
             },
         )
 
@@ -1690,6 +1752,7 @@ class AsyncToolsMixin:
         include_technical: Optional[bool] = None,
         include_structured_data: Optional[bool] = None,
         respect_robots: Optional[bool] = None,
+        max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
         """Extract comprehensive metadata from HTML including SEO, social, and technical information
 
@@ -1706,6 +1769,7 @@ class AsyncToolsMixin:
                 "include_technical": include_technical,
                 "include_structured_data": include_structured_data,
                 "respect_robots": respect_robots,
+                "max_inline_chars": max_inline_chars,
             },
         )
 
@@ -1752,10 +1816,13 @@ class AsyncToolsMixin:
         preserve_links: Optional[bool] = None,
         preserve_formatting: Optional[bool] = None,
         max_length: Optional[float] = None,
+        output_format: Optional[Literal["text", "markdown"]] = None,
         respect_robots: Optional[bool] = None,
+        escalate: Optional[bool] = None,
+        escalate_engine: Optional[Literal["playwright", "camoufox"]] = None,
         redact_pii: Optional[Union[bool, ExtractTextRequestRedactPii, Dict[str, Any]]] = None,
     ) -> ToolResult:
-        """Extract clean text content from HTML with various formatting options
+        """Extract clean text content from HTML with various formatting options. A url is fetched once (15 s timeout; a 429 or 503 whose Retry-After is 10 s or less is retried once after that wait). A PDF or other binary returns 415 UNSUPPORTED_CONTENT_TYPE with next_step process_document; a JSON body is returned as text with a warning. A bot wall is a BLOCKED error, unbilled; with escalate: true the same call renders the page once in a stealth browser and extracts the text from that instead. An empty client-side shell succeeds with rendered: false and the warning "page renders client-side; use scrape".
 
         Costs 1 credit. Docs: https://www.crawlforge.dev/docs/api-reference/tools/extract-text
         """
@@ -1770,7 +1837,10 @@ class AsyncToolsMixin:
                 "preserve_links": preserve_links,
                 "preserve_formatting": preserve_formatting,
                 "max_length": max_length,
+                "output_format": output_format,
                 "respect_robots": respect_robots,
+                "escalate": escalate,
+                "escalate_engine": escalate_engine,
                 "redact_pii": redact_pii,
             },
         )
@@ -1848,6 +1918,7 @@ class AsyncToolsMixin:
         complianceLevel: Optional[Literal["basic", "standard", "strict"]] = None,
         analysisOptions: Optional[Union[GenerateLlmsTxtRequestAnalysisOptions, Dict[str, Any]]] = None,
         outputOptions: Optional[Union[GenerateLlmsTxtRequestOutputOptions, Dict[str, Any]]] = None,
+        max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
         """Generate llms.txt (and optionally llms-full.txt) from a real analysis of the site: fetches the target page, robots.txt, and sitemap.xml, then reads up to 8 key same-domain pages (about/docs/pricing/blog/api/contact/faq and similar) for their titles, descriptions, and main text.
 
@@ -1863,6 +1934,7 @@ class AsyncToolsMixin:
                 "complianceLevel": complianceLevel,
                 "analysisOptions": analysisOptions,
                 "outputOptions": outputOptions,
+                "max_inline_chars": max_inline_chars,
             },
         )
 
@@ -1919,7 +1991,7 @@ class AsyncToolsMixin:
         timeout: Optional[float] = None,
         respect_robots: Optional[bool] = None,
     ) -> ToolResult:
-        """Multi-language and geo-location management for international content
+        """Audit the language and region signals of one page: html lang, the Content-Language header, hreflang alternates, the language detected in the visible text, and geo meta tags. It reads that page and applies nothing to any other call: target_language and target_country shape this one request only. No proxy is used, so the request leaves from the same address as every other tool and a geo-block is not lifted (a regional block follows the exit IP). To request a page in a language elsewhere, pass it on that call: fetch_url headers {"Accept-Language": ...} or stealth_mode stealthConfig {locale, timezone}; scrape has no locale parameter. The CrawlForge MCP server's localization tool is a different surface (configure_country and other operations) that returns a country's locale values and likewise applies none.
 
         Costs 2 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/localization
         """
@@ -1948,6 +2020,7 @@ class AsyncToolsMixin:
         max_depth: Optional[float] = None,
         include_external: Optional[bool] = None,
         timeout: Optional[float] = None,
+        max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
         """Enumerate a site's pages: reads {origin}/sitemap.xml when available (up to 500 URLs, following up to 3 child sitemaps), otherwise falls back to a bounded breadth-first crawl (up to 30 pages, ~18s budget)
 
@@ -1962,6 +2035,7 @@ class AsyncToolsMixin:
                 "max_depth": max_depth,
                 "include_external": include_external,
                 "timeout": timeout,
+                "max_inline_chars": max_inline_chars,
             },
         )
 
@@ -2086,7 +2160,7 @@ class AsyncToolsMixin:
         max_inline_chars: Optional[int] = None,
         redact_pii: Optional[Union[bool, ScrapeRequestRedactPii, Dict[str, Any]]] = None,
     ) -> ToolResult:
-        """Unified single-fetch, multi-format extraction. One fetch serves every requested format: markdown, html, rawHtml, text, links, metadata. A bot-defence challenge page returns success: false with blocked.vendor whatever its HTTP status; an empty shell or an error placeholder served as HTTP 200 is a failure too. Neither is charged. With escalate: true that same call renders the page once in a stealth browser and returns the formats from it, instead of returning the block.
+        """Unified single-fetch, multi-format extraction. One fetch serves every requested format: markdown, html, rawHtml, text, links, metadata. A bot-defence challenge page returns success: false with blocked.vendor whatever its HTTP status; an empty shell or an error placeholder served as HTTP 200 is a failure too. Neither is charged. A PDF or other binary returns 415 UNSUPPORTED_CONTENT_TYPE, unbilled; use process_document. A success whose markdown is empty carries a warning saying so. With escalate: true that same call renders the page once in a stealth browser and returns the formats from it, instead of returning the block.
 
         Costs 2 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/scrape
         """
@@ -2150,6 +2224,7 @@ class AsyncToolsMixin:
         params: Optional[Dict[str, Any]] = None,
         respect_robots: Optional[bool] = None,
         timeout: Optional[int] = None,
+        max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
         """Pre-built scrapers for popular sites and public APIs — no schema or selectors required. Three modes: name a template and pass a URL; pass template "auto" with a URL to have the matching template picked (the response reports which one it chose); or pass template "list" to enumerate them. Templates come in two kinds, reported as "mode" by the list. An entity template returns one record from one page. A list connector returns N records from one call, as data.items with a data.count — that covers the job-board group (Greenhouse, Lever, Ashby, Workable, Recruitee, Teamtailor), which reads a company's whole board from its ATS API, the government group (NHTSA vPIC VIN decoding, NPPES NPI provider registry), which reads free keyless federal registries, and shopify-collection, which lists a whole storefront collection. A list connector is driven either by a URL or by "params" — e.g. { "template": "greenhouse-jobs", "params": { "company": "stripe" } }. Sites that block plain HTTP fetches (e.g. Amazon) may return sparse data here; the CrawlForge MCP server version uses stealth browsing for those. reddit-thread reads the post from the Arctic Shift archive, because reddit.com blocks direct scraping; the reddit_search tool reads the comment tree. linkedin-profile and tweet are retired — those sites' robots.txt disallow every keyless path — and naming one, or passing one of their URLs to "auto", returns 400 TEMPLATE_UNAVAILABLE with the reason and no charge. Several templates read a machine-readable endpoint rather than the rendered page — shopify-product reads the store's own /products/<handle>.json, npm-package reads the npm registry API, and every list connector reads its platform's API — and report the URL they actually read as "fetched_url". When a Shopify store refuses its JSON endpoint (401, 403, 404 or 410), shopify-product reads the product page's own schema.org JSON-LD instead: the record carries "source": "json-ld" and a warning says so, with per-variant stock, compare-at prices and option names null because JSON-LD does not carry them.
 
@@ -2164,6 +2239,7 @@ class AsyncToolsMixin:
                 "params": params,
                 "respect_robots": respect_robots,
                 "timeout": timeout,
+                "max_inline_chars": max_inline_chars,
             },
         )
 
@@ -2176,7 +2252,6 @@ class AsyncToolsMixin:
         actions: Optional[List[Union[ScrapeWithActionsRequestActionsItem, Dict[str, Any]]]] = None,
         formats: Optional[List[Any]] = None,
         captureIntermediateStates: Optional[bool] = None,
-        captureScreenshots: Optional[bool] = None,
         formAutoFill: Optional[Union[ScrapeWithActionsRequestFormAutoFill, Dict[str, Any]]] = None,
         browserOptions: Optional[Union[ScrapeWithActionsRequestBrowserOptions, Dict[str, Any]]] = None,
         respect_robots: Optional[bool] = None,
@@ -2187,7 +2262,7 @@ class AsyncToolsMixin:
         max_inline_chars: Optional[float] = None,
         redact_pii: Optional[Union[bool, ScrapeWithActionsRequestRedactPii, Dict[str, Any]]] = None,
     ) -> ToolResult:
-        """Interact with a page before scraping — click, type, press keys, hover, choose a select option, scroll, navigate on, run JavaScript, or wait for dynamic content. Use for SPAs, login-gated content, or multi-step flows. Set browserOptions.stealth to run the chain in a stealth browser context.
+        """Interact with a page before scraping — click, type, press keys, hover, choose a select option, scroll, navigate on, run JavaScript, or wait for dynamic content. Use for SPAs, login-gated content, or multi-step flows. Set browserOptions.stealth to run the chain in a stealth browser context. A click or form submit that loads another page is a navigation too: it gets its own navigations entry (trigger names the action type), and finalUrl is where the chain ended. Screenshots are taken by {type:"screenshot"} actions (and on error) and stored as crawlforge://screenshot/{actionId} resources.
 
         Costs 5 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/scrape-with-actions
         """
@@ -2199,7 +2274,6 @@ class AsyncToolsMixin:
                 "actions": actions,
                 "formats": formats,
                 "captureIntermediateStates": captureIntermediateStates,
-                "captureScreenshots": captureScreenshots,
                 "formAutoFill": formAutoFill,
                 "browserOptions": browserOptions,
                 "respect_robots": respect_robots,
@@ -2227,8 +2301,9 @@ class AsyncToolsMixin:
         time_range: Optional[Literal["day", "week", "month", "year", "all"]] = None,
         file_type: Optional[str] = None,
         redact_pii: Optional[Union[bool, SearchWebRequestRedactPii, Dict[str, Any]]] = None,
+        max_inline_chars: Optional[int] = None,
     ) -> ToolResult:
-        """Search the web using Google Custom Search API. One query per call, or up to 10 in a single call with queries.
+        """Search the live web (Brave Search API) and get ranked results as JSON. One query per call, or up to 10 in a single call with queries.
 
         Costs 5 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/search-web
         """
@@ -2246,6 +2321,7 @@ class AsyncToolsMixin:
                 "time_range": time_range,
                 "file_type": file_type,
                 "redact_pii": redact_pii,
+                "max_inline_chars": max_inline_chars,
             },
         )
 
@@ -2262,7 +2338,7 @@ class AsyncToolsMixin:
         location_name: Optional[str] = None,
         location_code: Optional[float] = None,
     ) -> ToolResult:
-        """Check a domain's organic position in Google search results for a keyword (powered by DataForSEO)
+        """Check a domain's organic position in Google search results for a keyword (powered by DataForSEO). One lookup is one sample: Google can return a different result set for the same query minutes apart, so compare several lookups before reading a change in rank. A result set that barely mentions the keyword, a likely decoy page, comes back with suspect: true and a warning
 
         Costs 5 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/serp-rank
         """
@@ -2285,7 +2361,7 @@ class AsyncToolsMixin:
         request: Optional[Union[StealthModeRequest, Dict[str, Any]]] = None,
         /,
         *,
-        operation: Optional[Literal["scrape", "configure", "enable", "disable", "create_context", "create_page", "get_stats", "cleanup"]] = None,
+        operation: Optional[Literal["scrape", "configure", "create_context", "create_page", "get_stats", "cleanup"]] = None,
         stealthConfig: Optional[Union[StealthModeRequestStealthConfig, Dict[str, Any]]] = None,
         engine: Optional[Literal["playwright", "camoufox"]] = None,
         contextId: Optional[str] = None,
@@ -2298,7 +2374,7 @@ class AsyncToolsMixin:
         max_inline_chars: Optional[float] = None,
         redact_pii: Optional[Union[bool, StealthModeRequestRedactPii, Dict[str, Any]]] = None,
     ) -> ToolResult:
-        """Stealth browser scraping for sites that block normal scrapers (Cloudflare, DataDome, bot detection). Use operation "scrape" for a one-call render of a single URL; create_context → create_page → cleanup remains for multi-step work that reuses one context.
+        """Stealth browser scraping for sites that block normal scrapers (Cloudflare, DataDome, bot detection). Use operation "scrape" for a one-call render of a single URL. create_context then create_page is a navigation and challenge check: create_page loads urlToTest, reports its status, title and any challenge page, and closes the page before the call returns, so nothing on it carries over to a later call. For work over several calls on one page (log in, then read; click, then read), use browser_session with stealth: true. Operation "configure" only validates a stealthConfig and returns it with the defaults filled in — it stores nothing, so pass stealthConfig on each scrape or create_context call that should use it.
 
         Costs 5 credits. Docs: https://www.crawlforge.dev/docs/api-reference/tools/stealth-mode
         """

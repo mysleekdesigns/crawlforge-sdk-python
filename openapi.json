@@ -35,7 +35,8 @@
         "tags": [
           "tools"
         ],
-        "x-credits": 8,
+        "x-credits": 18,
+        "x-credits-note": "8 per run, plus 5 for each walled page (challenge, 403/429, empty shell, timeout) the agent gets by retrying it in a stealth browser, at most 2 a run; a retry blocked again is free. The published 18 is the ceiling reserved before the run; the charge is what ran, and the response reports it as credits_used.",
         "x-extra": {
           "availability": {
             "hosted_api": true,
@@ -61,7 +62,7 @@
         },
         "responses": {
           "200": {
-            "description": "The tool's result; 8 credits charged (see x-credits-note and x-extra for add-ons).",
+            "description": "The tool's result; 18 credits charged (see x-credits-note and x-extra for add-ons).",
             "content": {
               "application/json": {
                 "schema": {
@@ -291,6 +292,7 @@
             "robots": "URLs disallowed by the target's robots.txt, URLs on a host CrawlForge has permanently blocked or that asked us to back off, and URLs whose host declares a Crawl-delay too long for the batch budget all return status \"skipped\" (with the reason in error) and are not charged; the reasons are summarized in notes",
             "crawl_delay": "A robots.txt Crawl-delay is honoured per host: URLs on that host are fetched one at a time, spaced by the delay, while other hosts keep the full concurrency",
             "per_url_timeout": "8s",
+            "binary_content": "A PDF or other binary served with a 2xx status fails that URL (status \"failed\", error naming the content type) instead of being decoded as text; use process_document for it",
             "javascript": "Pages are fetched without JavaScript execution; screenshots and JS rendering require a browser — use the CrawlForge MCP server (npm: crawlforge-mcp-server)",
             "results_retention": "The full result set is stored for 24h and retrievable via get_batch_results using the returned batch_id"
           }
@@ -436,7 +438,7 @@
     "/tools/browser_session": {
       "post": {
         "operationId": "browser_session",
-        "summary": "Drive a browser across several calls, keeping the page, its cookies and its login in between. The loop is: open a session on a URL, snapshot it to list the interactive elements as refs (@e1, @e2 ...), act on those refs, read the content, close. Because the page stays open you can look before each step instead of committing to a whole chain up front, so a wrong selector costs one call rather than all of them. Not for a page that renders without interaction (scrape), and not for an interaction you can write out in advance — that is one scrape_with_actions call.",
+        "summary": "Drive a browser across several calls, keeping the page, its cookies and its login in between. The loop is: open a session on a URL, snapshot it to list the interactive elements as refs (@e1, @e2 ...), act on those refs, read the content (the whole page by default, onlyMainContent: true for the main article block alone), close. Because the page stays open you can look before each step instead of committing to a whole chain up front, so a wrong selector costs one call rather than all of them. Not for a page that renders without interaction (scrape), and not for an interaction you can write out in advance — that is one scrape_with_actions call.",
         "tags": [
           "tools"
         ],
@@ -587,6 +589,14 @@
           "tools"
         ],
         "x-credits": 4,
+        "x-extra": {
+          "response_notes": {
+            "pages_attempted": "URLs the crawl requested: pages_crawled + error_count",
+            "pages_crawled": "Pages fetched and parsed, one entry each in pages",
+            "error_count": "URLs that were requested and did not produce a page, one entry each in errors",
+            "errors": "One { url, depth, error, code? } per failed URL: a timeout, an unreachable host or an HTTP error status. code is present when known (FETCH_TIMEOUT, FETCH_FAILED, VALIDATION_ERROR for a private address). URLs skipped for robots.txt or Crawl-delay are counted in warnings instead"
+          }
+        },
         "x-docs-url": "https://www.crawlforge.dev/docs/api-reference/tools/crawl-deep",
         "requestBody": {
           "required": true,
@@ -703,7 +713,7 @@
     "/tools/deep_research": {
       "post": {
         "operationId": "deep_research",
-        "summary": "Multi-query web research: runs Google searches, fetches the top sources, and returns the most relevant passages verbatim with citations. Synthesis is extractive (no LLM on the hosted API) — for LLM-synthesized research use the CrawlForge MCP server.",
+        "summary": "Multi-query web research: runs web searches, fetches the top sources, and returns the most relevant passages verbatim with citations. Synthesis is extractive (no LLM on the hosted API) — for LLM-synthesized research use the CrawlForge MCP server.",
         "tags": [
           "tools"
         ],
@@ -954,11 +964,17 @@
     "/tools/extract_embedded_state": {
       "post": {
         "operationId": "extract_embedded_state",
-        "summary": "Return the JSON state a page already ships in its own HTML: __NEXT_DATA__, React Server Component flight chunks (self.__next_f), __NUXT__, __APOLLO_STATE__, __INITIAL_STATE__, __PRELOADED_STATE__ and <script type=\"application/json\"> blocks. One fetch, exact values, and no LLM in the extraction path — the numbers come from the site's own serialized state, so they cannot be fabricated. Sources are reported in \"found\" with their sizes; use \"path\" to return one subtree instead of a multi-megabyte blob. Results are never truncated.",
+        "summary": "Return the JSON state a page already ships in its own HTML: __NEXT_DATA__, React Server Component flight chunks (self.__next_f, \"$<id>\" references between rows resolved, plus a data_rows index of the rows carrying data), __NUXT__ and Nuxt 3's __NUXT_DATA__ (decoded), SvelteKit kit.start data, __APOLLO_STATE__, __INITIAL_STATE__, __PRELOADED_STATE__, ytInitialData, ytInitialPlayerResponse, __remixContext and other window globals (JSON, or a JavaScript literal evaluated statically — no page code runs), Inertia data-page, Shopify meta and product JSON, JSON data-* attributes and <script type=\"application/json\"> blocks. One fetch, exact values, and no LLM in the extraction path — the numbers come from the site's own serialized state, so they cannot be fabricated. Sources are reported in \"found\" with their sizes; use \"path\" to return one subtree instead of a multi-megabyte blob, keys_only to see its shape first, or find to list the paths of one key. A bot-defence wall or an empty shell carrying no state returns success: false, unbilled; with escalate: true the same call renders the page once in a stealth browser and reads the state from that instead.",
         "tags": [
           "tools"
         ],
         "x-credits": 2,
+        "x-extra": {
+          "credits_addon": {
+            "escalation": 5,
+            "description": "escalation is added only when escalate: true AND the stealth render actually ran — a call that asked to escalate and was served the page by the plain fetch pays the base price, so the projection base + escalation is a ceiling, never a floor. Every failure, a wall the render did not pass included, is charged nothing."
+          }
+        },
         "x-docs-url": "https://www.crawlforge.dev/docs/api-reference/tools/extract-embedded-state",
         "requestBody": {
           "required": true,
@@ -1072,11 +1088,17 @@
     "/tools/extract_links": {
       "post": {
         "operationId": "extract_links",
-        "summary": "Extract and analyze all links from HTML content",
+        "summary": "Extract and analyze all links from HTML content. A url is fetched once (15 s timeout; a 429 or 503 whose Retry-After is 10 s or less is retried once after that wait). A PDF or other binary returns 415 UNSUPPORTED_CONTENT_TYPE with next_step process_document; a JSON body returns no links and a warning. A bot wall is a BLOCKED error, unbilled; with escalate: true the same call renders the page once in a stealth browser and reads the links from that instead. An empty client-side shell succeeds with rendered: false and the warning \"page renders client-side; use scrape\".",
         "tags": [
           "tools"
         ],
         "x-credits": 1,
+        "x-extra": {
+          "credits_addon": {
+            "escalation": 5,
+            "description": "escalation is added only when escalate: true AND the stealth render actually ran — a call that asked to escalate and was served the page by the plain fetch pays the base price, so the projection base + escalation is a ceiling, never a floor. Every failure, a wall the render did not pass included, is charged nothing."
+          }
+        },
         "x-docs-url": "https://www.crawlforge.dev/docs/api-reference/tools/extract-links",
         "requestBody": {
           "required": true,
@@ -1456,11 +1478,17 @@
     "/tools/extract_text": {
       "post": {
         "operationId": "extract_text",
-        "summary": "Extract clean text content from HTML with various formatting options",
+        "summary": "Extract clean text content from HTML with various formatting options. A url is fetched once (15 s timeout; a 429 or 503 whose Retry-After is 10 s or less is retried once after that wait). A PDF or other binary returns 415 UNSUPPORTED_CONTENT_TYPE with next_step process_document; a JSON body is returned as text with a warning. A bot wall is a BLOCKED error, unbilled; with escalate: true the same call renders the page once in a stealth browser and extracts the text from that instead. An empty client-side shell succeeds with rendered: false and the warning \"page renders client-side; use scrape\".",
         "tags": [
           "tools"
         ],
         "x-credits": 1,
+        "x-extra": {
+          "credits_addon": {
+            "escalation": 5,
+            "description": "escalation is added only when escalate: true AND the stealth render actually ran — a call that asked to escalate and was served the page by the plain fetch pays the base price, so the projection base + escalation is a ceiling, never a floor. Every failure, a wall the render did not pass included, is charged nothing."
+          }
+        },
         "x-docs-url": "https://www.crawlforge.dev/docs/api-reference/tools/extract-text",
         "requestBody": {
           "required": true,
@@ -2212,7 +2240,7 @@
     "/tools/localization": {
       "post": {
         "operationId": "localization",
-        "summary": "Multi-language and geo-location management for international content",
+        "summary": "Audit the language and region signals of one page: html lang, the Content-Language header, hreflang alternates, the language detected in the visible text, and geo meta tags. It reads that page and applies nothing to any other call: target_language and target_country shape this one request only. No proxy is used, so the request leaves from the same address as every other tool and a geo-block is not lifted (a regional block follows the exit IP). To request a page in a language elsewhere, pass it on that call: fetch_url headers {\"Accept-Language\": ...} or stealth_mode stealthConfig {locale, timezone}; scrape has no locale parameter. The CrawlForge MCP server's localization tool is a different surface (configure_country and other operations) that returns a country's locale values and likewise applies none.",
         "tags": [
           "tools"
         ],
@@ -2821,7 +2849,7 @@
     "/tools/scrape": {
       "post": {
         "operationId": "scrape",
-        "summary": "Unified single-fetch, multi-format extraction. One fetch serves every requested format: markdown, html, rawHtml, text, links, metadata. A bot-defence challenge page returns success: false with blocked.vendor whatever its HTTP status; an empty shell or an error placeholder served as HTTP 200 is a failure too. Neither is charged. With escalate: true that same call renders the page once in a stealth browser and returns the formats from it, instead of returning the block.",
+        "summary": "Unified single-fetch, multi-format extraction. One fetch serves every requested format: markdown, html, rawHtml, text, links, metadata. A bot-defence challenge page returns success: false with blocked.vendor whatever its HTTP status; an empty shell or an error placeholder served as HTTP 200 is a failure too. Neither is charged. A PDF or other binary returns 415 UNSUPPORTED_CONTENT_TYPE, unbilled; use process_document. A success whose markdown is empty carries a warning saying so. With escalate: true that same call renders the page once in a stealth browser and returns the formats from it, instead of returning the block.",
         "tags": [
           "tools"
         ],
@@ -3246,7 +3274,7 @@
     "/tools/scrape_with_actions": {
       "post": {
         "operationId": "scrape_with_actions",
-        "summary": "Interact with a page before scraping — click, type, press keys, hover, choose a select option, scroll, navigate on, run JavaScript, or wait for dynamic content. Use for SPAs, login-gated content, or multi-step flows. Set browserOptions.stealth to run the chain in a stealth browser context.",
+        "summary": "Interact with a page before scraping — click, type, press keys, hover, choose a select option, scroll, navigate on, run JavaScript, or wait for dynamic content. Use for SPAs, login-gated content, or multi-step flows. Set browserOptions.stealth to run the chain in a stealth browser context. A click or form submit that loads another page is a navigation too: it gets its own navigations entry (trigger names the action type), and finalUrl is where the chain ended. Screenshots are taken by {type:\"screenshot\"} actions (and on error) and stored as crawlforge://screenshot/{actionId} resources.",
         "tags": [
           "tools"
         ],
@@ -3389,7 +3417,7 @@
     "/tools/search_web": {
       "post": {
         "operationId": "search_web",
-        "summary": "Search the web using Google Custom Search API. One query per call, or up to 10 in a single call with queries.",
+        "summary": "Search the live web (Brave Search API) and get ranked results as JSON. One query per call, or up to 10 in a single call with queries.",
         "tags": [
           "tools"
         ],
@@ -3515,7 +3543,7 @@
     "/tools/serp_rank": {
       "post": {
         "operationId": "serp_rank",
-        "summary": "Check a domain's organic position in Google search results for a keyword (powered by DataForSEO)",
+        "summary": "Check a domain's organic position in Google search results for a keyword (powered by DataForSEO). One lookup is one sample: Google can return a different result set for the same query minutes apart, so compare several lookups before reading a change in rank. A result set that barely mentions the keyword, a likely decoy page, comes back with suspect: true and a warning",
         "tags": [
           "tools"
         ],
@@ -3634,7 +3662,7 @@
     "/tools/stealth_mode": {
       "post": {
         "operationId": "stealth_mode",
-        "summary": "Stealth browser scraping for sites that block normal scrapers (Cloudflare, DataDome, bot detection). Use operation \"scrape\" for a one-call render of a single URL; create_context → create_page → cleanup remains for multi-step work that reuses one context.",
+        "summary": "Stealth browser scraping for sites that block normal scrapers (Cloudflare, DataDome, bot detection). Use operation \"scrape\" for a one-call render of a single URL. create_context then create_page is a navigation and challenge check: create_page loads urlToTest, reports its status, title and any challenge page, and closes the page before the call returns, so nothing on it carries over to a later call. For work over several calls on one page (log in, then read; click, then read), use browser_session with stealth: true. Operation \"configure\" only validates a stealthConfig and returns it with the defaults filled in — it stores nothing, so pass stealthConfig on each scrape or create_context call that should use it.",
         "tags": [
           "tools"
         ],
@@ -3646,8 +3674,6 @@
             "create_context": 5,
             "create_page": 5,
             "configure": 1,
-            "enable": 1,
-            "disable": 1,
             "get_stats": 1,
             "cleanup": 1
           },
@@ -4076,7 +4102,7 @@
       },
       "ErrorResponse": {
         "type": "object",
-        "description": "Every error carries error.code and error.message; no error response is charged. Codes by status:\n400 VALIDATION_ERROR (details holds the validation issues; also a URL that resolves to a private or local address, or a body that is not a JSON object). scrape_template adds UNKNOWN_TEMPLATE, NO_TEMPLATE_MATCH, TEMPLATE_UNAVAILABLE, TEMPLATE_MISMATCH, MISSING_URL, INVALID_TEMPLATE_PARAMS and CREDENTIAL_MISSING; scrape adds UNSUPPORTED_FORMAT; read_result adds PATH_NOT_FOUND.\n401 MISSING_API_KEY, INVALID_API_KEY.\n402 INSUFFICIENT_CREDITS (details: required, tool, autoRechargeTriggered, upgradeUrl; the X-Auto-Recharge-Triggered header says whether an automatic recharge was started).\n403 ROBOTS_DISALLOWED (robots.txt disallows the path for CrawlForge; respect_robots: false overrides it and the override is recorded), HOST_BLOCKED (a host on the operator blocklist).\n404 RESULT_NOT_FOUND, BATCH_NOT_FOUND, BASELINE_NOT_FOUND (an unknown or expired handle, batch id or baseline).\n413 RESPONSE_TOO_LARGE, DOCUMENT_TOO_LARGE.\n422 EXTRACTION_FAILED, SELECTOR_NOT_FOUND, NO_PAGES_MAPPED, DOCUMENT_PARSE_FAILED, USE_REDDIT_SEARCH (a reddit.com URL: reddit.com refuses every non-browser client, so it is never fetched; the message names the reddit_search call that reads the same posts and comments from the community archive).\n429 RATE_LIMIT_EXCEEDED (your plan's rate limit; Retry-After: 60), HOST_BACKOFF (the target site asked us to wait via Retry-After; not overridable).\n500 TOOL_ERROR, INTERNAL_ERROR, CREDIT_DEDUCTION_FAILED.\n501 OPERATION_NOT_AVAILABLE, UNSUPPORTED_DOCUMENT_TYPE (supported by the CrawlForge MCP server with the same key).\n502 FETCH_FAILED, TARGET_HTTP_ERROR, DOCUMENT_FETCH_ERROR (the target could not be reached or answered with an error), BLOCKED (a bot-defence challenge page; scrape names the vendor in `blocked`), UNUSABLE_DOCUMENT (an empty shell or error placeholder served as a page), MCP_UPSTREAM_ERROR, MCP_UPSTREAM_UNAVAILABLE, MCP_PROXY_MISCONFIGURED, RESEARCH_SEARCH_FAILED, RESEARCH_SEARCH_UNAVAILABLE, TOOL_ERROR (the execution backend reported a tool failure).\n503 TOOL_NOT_AVAILABLE (needs a browser, an LLM or local infrastructure the hosted API does not run), STORAGE_UNAVAILABLE, MCP_PROXY_MISCONFIGURED, RESEARCH_NOT_CONFIGURED, RESEARCH_RATE_LIMITED.\n504 FETCH_TIMEOUT, MCP_UPSTREAM_TIMEOUT, RESEARCH_SEARCH_TIMEOUT.",
+        "description": "Every error carries error.code and error.message; no error response is charged. Codes by status:\n400 VALIDATION_ERROR (details holds the validation issues; also a URL that resolves to a private or local address, or a body that is not a JSON object). scrape_template adds UNKNOWN_TEMPLATE, NO_TEMPLATE_MATCH, TEMPLATE_UNAVAILABLE, TEMPLATE_MISMATCH, MISSING_URL, INVALID_TEMPLATE_PARAMS and CREDENTIAL_MISSING; scrape adds UNSUPPORTED_FORMAT; read_result adds PATH_NOT_FOUND.\n401 MISSING_API_KEY, INVALID_API_KEY.\n402 INSUFFICIENT_CREDITS (details: required, tool, autoRechargeTriggered, upgradeUrl; the X-Auto-Recharge-Triggered header says whether an automatic recharge was started).\n403 ROBOTS_DISALLOWED (robots.txt disallows the path for CrawlForge; respect_robots: false overrides it and the override is recorded), HOST_BLOCKED (a host on the operator blocklist).\n404 RESULT_NOT_FOUND, BATCH_NOT_FOUND, BASELINE_NOT_FOUND (an unknown or expired handle, batch id or baseline).\n413 RESPONSE_TOO_LARGE, DOCUMENT_TOO_LARGE.\n422 EXTRACTION_FAILED, SELECTOR_NOT_FOUND, NO_PAGES_MAPPED, DOCUMENT_PARSE_FAILED, USE_REDDIT_SEARCH (a reddit.com URL: reddit.com refuses every non-browser client, so it is never fetched; the message names the reddit_search call that reads the same posts and comments from the community archive).\n429 RATE_LIMIT_EXCEEDED (your plan's rate limit; Retry-After: 60), HOST_BACKOFF (the target site asked us to wait via Retry-After; not overridable), CRAWL_DELAY (a redirect that would have to wait out the target site's robots.txt Crawl-delay for longer than the request has; the message names the redirect target to request directly).\n500 TOOL_ERROR, INTERNAL_ERROR, CREDIT_DEDUCTION_FAILED.\n501 OPERATION_NOT_AVAILABLE, UNSUPPORTED_DOCUMENT_TYPE (supported by the CrawlForge MCP server with the same key).\n502 FETCH_FAILED, TARGET_HTTP_ERROR, DOCUMENT_FETCH_ERROR (the target could not be reached or answered with an error), BLOCKED (a bot-defence challenge page; scrape and extract_embedded_state name the vendor in `blocked`), UNUSABLE_DOCUMENT (an empty shell or error placeholder served as a page), MCP_UPSTREAM_ERROR, MCP_UPSTREAM_UNAVAILABLE, MCP_PROXY_MISCONFIGURED, RESEARCH_SEARCH_FAILED, RESEARCH_SEARCH_UNAVAILABLE, TOOL_ERROR (the execution backend reported a tool failure).\n503 TOOL_NOT_AVAILABLE (needs a browser, an LLM or local infrastructure the hosted API does not run), STORAGE_UNAVAILABLE, MCP_PROXY_MISCONFIGURED, RESEARCH_NOT_CONFIGURED, RESEARCH_RATE_LIMITED.\n504 FETCH_TIMEOUT, MCP_UPSTREAM_TIMEOUT, RESEARCH_SEARCH_TIMEOUT.",
         "required": [
           "error"
         ],
@@ -4108,7 +4134,7 @@
           },
           "blocked": {
             "type": "object",
-            "description": "scrape only, with code BLOCKED: the bot-defence vendor recognised on the page and the evidence for it.",
+            "description": "scrape and extract_embedded_state, with code BLOCKED: the bot-defence vendor recognised on the page and the evidence for it.",
             "required": [
               "vendor",
               "evidence"
@@ -4125,7 +4151,7 @@
           "escalated": {
             "type": "boolean",
             "const": true,
-            "description": "scrape only: the call asked to escalate, the stealth render ran, and it did not get past the wall either. Nothing was charged."
+            "description": "scrape and extract_embedded_state: the call asked to escalate, the stealth render ran, and it did not get past the wall either. Nothing was charged."
           }
         }
       },
@@ -4205,6 +4231,11 @@
             "type": "number",
             "default": 10,
             "description": "Max URLs to fetch (hard cap: 20)"
+          },
+          "max_inline_chars": {
+            "type": "number",
+            "default": 40000,
+            "description": "Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit)."
           }
         },
         "required": [
@@ -4392,7 +4423,7 @@
                     "name"
                   ]
                 },
-                "description": "Fields to extract from each page: { name, selector (CSS), attribute? }. Without attribute the element text is returned; xpath is not supported."
+                "description": "Fields to extract from each page: { name, selector (CSS), attribute? }. Without attribute the element text is returned, one line per block element; xpath is not supported."
               },
               "capture_screenshots": {
                 "type": "boolean"
@@ -4610,6 +4641,11 @@
               "markdown"
             ],
             "description": "read: formats to return from the live DOM — markdown, html, text, json. The page is read as it stands after everything the session has done, cookies and all; nothing is re-fetched."
+          },
+          "onlyMainContent": {
+            "type": "boolean",
+            "default": false,
+            "description": "read: false (default) returns the whole page as markdown/text (markdown leaves out nav, footer and aside elements, as scrape's does; text leaves out nothing); true keeps only the main article block via Readability, which drops navigation and footers but can also drop list items on listing and app pages. The result's extractionMethod says which ran (\"full_page\" for the whole page)."
           },
           "full_page": {
             "type": "boolean",
@@ -4875,7 +4911,7 @@
           "clean_html": {
             "default": true,
             "type": "boolean",
-            "description": "Return clean text instead of HTML"
+            "description": "Return clean text instead of HTML: one line per block element (heading, paragraph, list item, table row)"
           },
           "extract_main_content": {
             "default": true,
@@ -4968,15 +5004,65 @@
             "maximum": 60000,
             "description": "Fetch timeout in ms (1000-60000)"
           },
+          "keys_only": {
+            "default": false,
+            "type": "boolean",
+            "description": "Return keys instead of data: the selected data (after path, if given) described two levels deep, each leaf labelled \"object\", \"array(<n>)\", \"string\", \"number\", \"boolean\" or \"null\", and an array as { length, first } with the shape of its first element. found and bytes are unchanged, so one cheap call shows which path to ask for."
+          },
+          "find": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Return `matches` instead of `data`: every property with this key name (case-insensitive) anywhere in the selected data (after `path`), in document order, each as {path, preview} with the first 200 characters of its value - at most 50, with `matches_total` and `matches_truncated`. Each match path already starts with `path`, so it can be passed straight back as `path`. Discover where a field lives without downloading the payload. Cannot be combined with keys_only"
+          },
+          "raw": {
+            "default": false,
+            "type": "boolean",
+            "description": "Also keep the undecoded __NUXT_DATA__ devalue array under json_scripts, beside the decoded nuxt_data. Default: false"
+          },
+          "escalate": {
+            "default": false,
+            "type": "boolean",
+            "description": "Retry a blocked page in a stealth browser, in this same call. The plain fetch always runs first; only a bot wall, an empty shell with no state, or a 403, 429 or 444 escalates — never a 404 or a 5xx. The rendered HTML goes through the same parser. The response carries escalated: true|false whenever this is set, plus stealth: { engine, vendor_detected } when the render ran. It costs the escalation add-on only when it ran. The stage needs the CrawlForge execution backend: where that is not configured it returns 503 TOOL_NOT_AVAILABLE and charges nothing. robots.txt is respected on the escalated path too. Reading window globals (window_state) is MCP-server only: the render here returns HTML."
+          },
+          "escalate_engine": {
+            "default": "playwright",
+            "type": "string",
+            "enum": [
+              "playwright",
+              "camoufox"
+            ],
+            "description": "Browser engine for the escalated render (camoufox only where installed on the backend). Ignored when no escalation runs."
+          },
+          "wait_for": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 30000,
+            "description": "Extra wait after page load for the escalated render, in ms (0-30000), passed to stealth_mode for state that is written after DOMContentLoaded. Ignored when no escalation runs."
+          },
           "max_inline_chars": {
             "type": "integer",
             "minimum": 1000,
             "maximum": 10000000,
-            "description": "Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit)."
+            "description": "Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit). Here the response keeps url, path, bytes, found, data_keys (the top-level keys of data) and escalated/stealth, and preview is the head of the pretty-printed JSON cut at a line boundary, so no value is ever split and the response stays within max_inline_chars; read_result json_path reads any field of the stored result, e.g. \"data.next_data.props\"."
           }
         },
         "required": [
           "url"
+        ],
+        "anyOf": [
+          {
+            "properties": {
+              "keys_only": {
+                "const": false
+              }
+            }
+          },
+          {
+            "properties": {
+              "find": false
+            }
+          }
         ]
       },
       "ExtractLinksRequest": {
@@ -5012,7 +5098,11 @@
           "include_internal": {
             "default": true,
             "type": "boolean",
-            "description": "Include internal links"
+            "description": "Include internal links (same hostname as the page)"
+          },
+          "filter_external": {
+            "type": "boolean",
+            "description": "The MCP tool's name for outbound-only: true is the same as include_internal: false. An alias; when true it overrides include_internal."
           },
           "include_anchors": {
             "default": false,
@@ -5022,16 +5112,36 @@
           "deduplicate": {
             "default": true,
             "type": "boolean",
-            "description": "Remove duplicate links"
+            "description": "Remove duplicate links, compared without fragment or trailing slash; the first occurrence is kept"
           },
           "include_metadata": {
             "default": true,
             "type": "boolean",
-            "description": "Include link metadata (title, domain, etc.)"
+            "description": "Include each link's title and the domains count map. Every record always carries href, text, type, domain, rel and original_href — the shape the MCP tool returns. type is internal, external, anchor, other (mailto:, tel:, javascript: and other non-web schemes; href is null except for mailto: and tel:) or relative (html input with no base_url). A <base href> in the page is honoured unless base_url is given."
           },
           "respect_robots": {
             "default": true,
             "type": "boolean"
+          },
+          "escalate": {
+            "default": false,
+            "type": "boolean",
+            "description": "Retry a walled page in a stealth browser, in this same call (url input only). The plain fetch always runs first; only a named bot wall, a 403, 429 or 444, or an empty shell or error placeholder served as 2xx escalates — never a 404, a 5xx, a binary or a host whose Retry-After window is still open. The response carries escalated: true|false whenever this is set, plus stealth: { engine, vendor_detected } when the render ran. It costs the escalation add-on only when it ran. The stage needs the CrawlForge execution backend: where that is not configured it returns 503 TOOL_NOT_AVAILABLE and charges nothing. robots.txt is respected on the escalated path too."
+          },
+          "escalate_engine": {
+            "default": "playwright",
+            "type": "string",
+            "enum": [
+              "playwright",
+              "camoufox"
+            ],
+            "description": "Browser engine for the escalated render (camoufox only where installed on the backend). Ignored when no escalation runs."
+          },
+          "max_inline_chars": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 10000000,
+            "description": "Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit)."
           }
         },
         "anyOf": [
@@ -5058,7 +5168,7 @@
           "url": {
             "type": "string",
             "format": "uri",
-            "description": "URL to fetch and extract metadata from"
+            "description": "URL to fetch and extract metadata from. The response always carries redirected (true when the fetch ended on a different URL, compared after parsing, so https://example.com and https://example.com/ are the same page), and requested_url when it did; metadata.basic.url and extracted_from are the final URL"
           },
           "include_social": {
             "default": true,
@@ -5083,6 +5193,12 @@
           "respect_robots": {
             "default": true,
             "type": "boolean"
+          },
+          "max_inline_chars": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 10000000,
+            "description": "Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit)."
           }
         },
         "anyOf": [
@@ -5129,7 +5245,7 @@
             "required": [
               "properties"
             ],
-            "description": "JSON Schema defining the data structure to extract"
+            "description": "JSON Schema defining the data structure to extract. A number or integer property takes the first number in the text found (\"4.5 out of 5\" is 4.5; an integer only when whole); text with no number is returned as it is"
           },
           "prompt": {
             "type": "string",
@@ -5192,27 +5308,50 @@
           "clean": {
             "default": true,
             "type": "boolean",
-            "description": "Remove extra whitespace and formatting"
+            "description": "Collapse runs of spaces within a line and drop blank lines; line breaks between blocks are kept. Text mode only."
           },
           "preserve_links": {
             "default": false,
             "type": "boolean",
-            "description": "Include links in the extracted text"
+            "description": "Append the links as \"text (href)\" lines after the text. REST only (the MCP tool has no such option); text mode only."
           },
           "preserve_formatting": {
             "default": false,
             "type": "boolean",
-            "description": "Preserve basic HTML formatting"
+            "description": "Keep paragraph and heading breaks from the HTML source. REST only (the MCP tool has no such option); text mode only."
           },
           "max_length": {
             "type": "number",
             "minimum": 1,
             "maximum": 1000000,
-            "description": "Maximum length of extracted text"
+            "description": "Maximum length of the returned text or markdown; a cut text ends in \"...\" and data.truncated is true (data.truncated is always present, false when nothing was cut)"
+          },
+          "output_format": {
+            "default": "text",
+            "type": "string",
+            "enum": [
+              "text",
+              "markdown"
+            ],
+            "description": "text (default): data.text, one line per block element. markdown: data.markdown, the selected elements (or the body) converted with Turndown, data tables as GFM pipe tables and image and link URLs absolute. Either way data carries output_format, word_count and char_count, named as the MCP tool names them; markdown is counted without its # * ` _ [ ] syntax."
           },
           "respect_robots": {
             "default": true,
             "type": "boolean"
+          },
+          "escalate": {
+            "default": false,
+            "type": "boolean",
+            "description": "Retry a walled page in a stealth browser, in this same call (url input only). The plain fetch always runs first; only a named bot wall, a 403, 429 or 444, or an empty shell or error placeholder served as 2xx escalates — never a 404, a 5xx, a binary or a host whose Retry-After window is still open. The response carries escalated: true|false whenever this is set, plus stealth: { engine, vendor_detected } when the render ran. It costs the escalation add-on only when it ran. The stage needs the CrawlForge execution backend: where that is not configured it returns 503 TOOL_NOT_AVAILABLE and charges nothing. robots.txt is respected on the escalated path too."
+          },
+          "escalate_engine": {
+            "default": "playwright",
+            "type": "string",
+            "enum": [
+              "playwright",
+              "camoufox"
+            ],
+            "description": "Browser engine for the escalated render (camoufox only where installed on the backend). Ignored when no escalation runs."
           },
           "redact_pii": {
             "anyOf": [
@@ -5470,6 +5609,12 @@
               }
             },
             "description": "Output customization: organizationName (overrides the site title), contactEmail, customGuidelines, customRestrictions"
+          },
+          "max_inline_chars": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 10000000,
+            "description": "Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit)."
           }
         },
         "required": [
@@ -5517,11 +5662,11 @@
           },
           "target_language": {
             "type": "string",
-            "description": "Target language code (e.g., \"en\", \"fr\", \"es\")"
+            "description": "Language you expect (e.g., \"en\", \"fr\", \"es\"). Sent as this request's Accept-Language and compared with the detected language and html lang"
           },
           "target_country": {
             "type": "string",
-            "description": "Target country code (e.g., \"US\", \"FR\", \"JP\")"
+            "description": "Country you expect (e.g., \"US\", \"FR\", \"JP\"). Echoed back and sent as an X-Country-Code header on this request; it does not change where the request comes from"
           },
           "detect_language": {
             "default": true,
@@ -5585,6 +5730,12 @@
             "minimum": 1000,
             "maximum": 30000,
             "description": "Overall crawl budget in milliseconds (1000-30000; capped at ~18000 to fit the serverless limit)"
+          },
+          "max_inline_chars": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 10000000,
+            "description": "Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit)."
           }
         },
         "required": [
@@ -5620,7 +5771,7 @@
           "extract_text": {
             "default": true,
             "type": "boolean",
-            "description": "Extract text content (capped at 200000 characters; PDFs read up to 200 pages)"
+            "description": "Extract text content (capped at 200000 characters; PDFs read up to 200 pages, and pages_read { start, end, count, total_pages } says which; HTML is read one line per block element)"
           },
           "extract_metadata": {
             "default": true,
@@ -5913,7 +6064,33 @@
                 }
               ]
             },
-            "description": "Output formats: markdown, html, rawHtml, text, links, metadata, plus two query-scoped object formats. { type: 'highlights', query, max_highlights (1-50, default 10), mode } returns the sentences and code blocks matching the query, verbatim, each with an offset and length into the markdown format of the same call (table rows too on the MCP server; this API flattens tables to text). { type: 'question', question, mode } returns an answer assembled from the best-matching passages, with its evidence. mode defaults to 'extractive'; mode 'model' needs an LLM and is rejected here, as are the 'screenshot' and 'json-schema' formats, which require the CrawlForge MCP server (browser/LLM)."
+            "description": "Output formats: markdown, html, rawHtml, text, links, metadata, plus two query-scoped object formats. { type: 'highlights', query, max_highlights (1-50, default 10), mode } returns the sentences and code blocks matching the query, verbatim, each with an offset and length into the markdown format of the same call (table rows too: markdown keeps data tables as GFM pipe tables). { type: 'question', question, mode } returns an answer assembled from the best-matching passages, with its evidence. At most one of each per request. mode defaults to 'extractive'; mode 'model' needs an LLM and is rejected here, as are the 'screenshot' and 'json-schema' formats, which require the CrawlForge MCP server (browser/LLM).",
+            "allOf": [
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "highlights"
+                    }
+                  }
+                },
+                "minContains": 0,
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "question"
+                    }
+                  }
+                },
+                "minContains": 0,
+                "maxContains": 1
+              }
+            ]
           },
           "onlyMainContent": {
             "default": true,
@@ -6090,6 +6267,12 @@
             "minimum": 5000,
             "maximum": 60000,
             "description": "Request timeout in milliseconds (5000–60000)."
+          },
+          "max_inline_chars": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 10000000,
+            "description": "Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit)."
           }
         },
         "required": [
@@ -6146,7 +6329,7 @@
           },
           "actions": {
             "type": "array",
-            "description": "Browser actions to perform before scraping (1-20). A snapshot action first lists the interactive elements on the page as @e refs, which later actions can target in place of CSS selectors.",
+            "description": "Browser actions to perform before scraping (1-20). A snapshot action first lists the interactive elements on the page, including those inside open shadow roots and iframes, as @e refs (@e1, @e2, … in document order), which later actions can target in place of CSS selectors.",
             "items": {
               "type": "object",
               "properties": {
@@ -6165,7 +6348,7 @@
                     "navigate",
                     "snapshot"
                   ],
-                  "description": "Action to perform"
+                  "description": "Action to perform. executeJavaScript is disabled unless the server runs with ALLOW_JAVASCRIPT_EXECUTION=true; it is refused on the hosted API."
                 },
                 "selector": {
                   "type": "string",
@@ -6189,7 +6372,7 @@
                 },
                 "url": {
                   "type": "string",
-                  "description": "navigate: URL to load mid-chain, in the same browser session. Passes the same robots.txt and SSRF checks as the top-level url."
+                  "description": "navigate: URL to load mid-chain, in the same browser session. Passes the same robots.txt and SSRF checks as the top-level url. Every navigation is checked for a bot wall, HTTP error page or challenge interstitial (an HTTP 202 interstitial included): this action's result carries httpStatus and, when a wall was named, blocked: { vendor, evidence } — reported, not failed. The result lists every navigation in order in navigations[] (index 0 the initial load), each { url, finalUrl, httpStatus, blocked? }, httpStatus null when unknown. A click or form submit that loads another page is a navigation too: it gets its own navigations entry with trigger naming the action type, and the top-level finalUrl is where the chain ended (url stays the one requested). A chain that ends on a wall is never reported as success: it fails (over REST, a 502 TOOL_ERROR with nothing charged)."
                 },
                 "waitUntil": {
                   "type": "string",
@@ -6355,17 +6538,12 @@
             "default": [
               "json"
             ],
-            "description": "Output formats: markdown, html, json, text, screenshots"
+            "description": "Output formats for scraped content: markdown, html, json, text. For an image, add a {type:\"screenshot\"} action where you want it taken."
           },
           "captureIntermediateStates": {
             "type": "boolean",
             "default": false,
-            "description": "Capture page state after each action"
-          },
-          "captureScreenshots": {
-            "type": "boolean",
-            "default": true,
-            "description": "Take screenshots during action execution"
+            "description": "Capture page state after each action: intermediateStates[] gets one entry per action (capturePoint is the action's 1-based position) with the url, title and the requested formats at that point"
           },
           "formAutoFill": {
             "type": "object",
@@ -6373,7 +6551,7 @@
             "properties": {
               "fields": {
                 "type": "array",
-                "description": "Fields to fill: { selector, value, type: text|select|checkbox|radio|file, waitAfter }"
+                "description": "Fields to fill: { selector, value, type: text|select|checkbox|radio|file, waitAfter }. type picks how the field is filled: text (default) types the value, select picks the option by value or label, checkbox/radio check the input (a selector matching a group checks the member whose value attribute equals value; a checkbox with value \"false\" is unchecked). file is not supported and fails that action"
               },
               "submitSelector": {
                 "type": "string",
@@ -6416,6 +6594,39 @@
                 "type": "boolean",
                 "default": false,
                 "description": "Run the action chain in the stealth Chromium engine at its medium profile instead of the standard browser pool. The boolean is the only knob — level, fingerprint randomization and engine are not settable from here. Slower to start; it renders JavaScript, it does not solve challenges."
+              },
+              "consent": {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "reject",
+                  "accept"
+                ],
+                "default": "off",
+                "description": "Cookie/consent banner handling. \"reject\" runs an opt-out on a recognised consent banner (DuckDuckGo autoconsent rules) once after the initial navigation and after each navigate action, capped at 2 s; \"accept\" opts in instead. When not \"off\" the result carries consent: { cmp, action, ms } for the initial navigation, and each navigate action's result carries its own result.consent. cmp is the consent platform matched, or null when none was; action is optOut, optIn, hide (a cosmetic rule hid the banner), timeout (a banner was detected but not answered within 2 s), error, or none (nothing matched). No match never fails the chain. Default \"off\", so a chain that clicks the banner itself keeps working."
+              },
+              "proxyRotation": {
+                "type": "object",
+                "description": "Route the stealth browser through proxies you supply. Requires stealth: true (refused otherwise). Chromium engine only: refused on Camoufox, which applies its proxy at browser launch and shares that browser across calls. CrawlForge supplies no proxies; a residential proxy is what gets past an IP-reputation block that no fingerprint fixes. Proxies on loopback, private, link-local or metadata addresses are refused. Credentials are never echoed back: metadata.browserOptions shows them redacted.",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Route the chain through proxies"
+                  },
+                  "proxies": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Proxy URLs: \"http://user:pass@host:port\" (percent-encode a password containing @ : or /), or bare \"host:port\" for an unauthenticated HTTP proxy. http, https, socks4 and socks5 are accepted."
+                  },
+                  "rotationInterval": {
+                    "type": "number",
+                    "default": 300000,
+                    "description": "Minimum ms on one proxy before the list advances"
+                  }
+                }
               }
             }
           },
@@ -6456,8 +6667,8 @@
           },
           "maxRetries": {
             "type": "number",
-            "default": 1,
-            "description": "Maximum retry attempts on failure (0-3)"
+            "default": 0,
+            "description": "Whole-chain retries on failure (0-3). A retry re-navigates to the starting URL and replays every action; each attempt is reported under attempts[]"
           },
           "screenshotOnError": {
             "type": "boolean",
@@ -6605,6 +6816,12 @@
               }
             ],
             "description": "Remove personal data from the text this call returns, before it is stored or sent back. true is shorthand for { mode: \"fast\" }: every entity, tagged. As an object: entities (any of EMAIL, PHONE, FINANCIAL, SECRET; omitted or empty means all four, and any other name is a 400 rather than a silent no-op), replace_style (\"tag\" → <EMAIL>, \"mask\" → [REDACTED], \"remove\" → nothing; default \"tag\") and mode (\"fast\", the default, is regex-only and costs no extra credits; \"model\" covers PERSON and LOCATION, needs an LLM and is rejected here — use the CrawlForge MCP server). The response carries redaction: { entities, count, mode } inside data, saying what was removed. Detection is deliberately conservative: a card number must pass Luhn and an IBAN mod-97, so a false positive cannot silently destroy real page content. URLs, queries and identifiers the response uses to name what was fetched are left intact, and counters derived from the text (content_length, word_count, character_count) describe the text as it was extracted, before redaction."
+          },
+          "max_inline_chars": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 10000000,
+            "description": "Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit)."
           }
         },
         "oneOf": [
@@ -6631,14 +6848,14 @@
           "target": {
             "type": "string",
             "minLength": 1,
-            "description": "Domain or URL to locate in the results (e.g. 'example.com')"
+            "description": "Domain or URL to locate in the results (e.g. 'example.com'). Matched by host, not exact URL: a URL is reduced to its host, and any page on that host or its subdomains counts"
           },
           "depth": {
-            "default": 100,
+            "default": 30,
             "type": "number",
             "minimum": 10,
             "maximum": 200,
-            "description": "How many results to scan (10-200; 100 = 1 page of cost)"
+            "description": "How many results to scan (10-200, default 30); deeper scans take longer. Credits stay at 5 at any depth"
           },
           "device": {
             "default": "desktop",
@@ -6677,19 +6894,17 @@
             "enum": [
               "scrape",
               "configure",
-              "enable",
-              "disable",
               "create_context",
               "create_page",
               "get_stats",
               "cleanup"
             ],
             "default": "configure",
-            "description": "Stealth operation to perform. \"scrape\" creates a context, navigates to url, returns the requested formats and tears the context down, all in one billed call."
+            "description": "Stealth operation to perform. \"scrape\" creates a context, navigates to url, returns the requested formats and tears the context down, all in one billed call. \"configure\" validates stealthConfig and returns it with defaults filled in; nothing is stored. \"create_context\": a stealth context to run create_page in. \"create_page\": navigate urlToTest in that context and report status, title and any challenge page; the page is closed before the call returns. \"get_stats\": the backend's open contexts, browser and proxy state. \"cleanup\": close the browser and every context."
           },
           "stealthConfig": {
             "type": "object",
-            "description": "Stealth browser configuration",
+            "description": "Stealth browser configuration. Applies to the call it is passed on and is not remembered. Chromium applies customUserAgent, customViewport, locale and timezone per call. On camoufox customUserAgent and customViewport are not applied, locale is fixed when the browser launches, and behind a proxy locale and timezone come from the exit IP; each of these is reported in `warnings`.",
             "properties": {
               "level": {
                 "type": "string",
@@ -6743,7 +6958,7 @@
           },
           "urlToTest": {
             "type": "string",
-            "description": "URL to navigate to when creating a page"
+            "description": "create_page: the URL to navigate to and check"
           },
           "url": {
             "type": "string",

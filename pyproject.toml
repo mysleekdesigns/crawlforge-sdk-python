@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "crawlforge"
-version = "0.2.0"
+version = "0.3.0"
 description = "Official Python SDK for the CrawlForge REST API: 31 metered web tools behind one API key."
 readme = "README.md"
 license = "MIT"

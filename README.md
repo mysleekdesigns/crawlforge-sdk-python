@@ -104,7 +104,7 @@ succeeded.
 <!-- generated:tools:start -->
 | Method | Credits | Note | Docs |
 |---|---|---|---|
-| `agent` | 8 |  | [docs](https://www.crawlforge.dev/docs/api-reference/tools/agent) |
+| `agent` | 18 | 8 per run, plus 5 for each walled page (challenge, 403/429, empty shell, timeout) the agent gets by retrying it in a stealth browser, at most 2 a run; a retry blocked again is free. The published 18 is the ceiling reserved before the run; the charge is what ran, and the response reports it as credits_used. | [docs](https://www.crawlforge.dev/docs/api-reference/tools/agent) |
 | `analyze_content` | 3 |  | [docs](https://www.crawlforge.dev/docs/api-reference/tools/analyze-content) |
 | `batch_scrape` | 5 | 5 per URL attempted (skipped URLs are not charged) | [docs](https://www.crawlforge.dev/docs/api-reference/tools/batch-scrape) |
 | `browser_session` | 3 | Priced per operation, not per call: open 3, read 2, and snapshot, act, screenshot, close and list 1 each. The published 3 is the ceiling — it is what an unrecognised operation costs and what is reserved before the body is read, and the charge drops to the operation's own price. A login-then-read flow (open, snapshot, act, act, read, close) costs 9. | [docs](https://www.crawlforge.dev/docs/api-reference/tools/browser-session) |

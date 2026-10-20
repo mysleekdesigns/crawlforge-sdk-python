@@ -60,6 +60,7 @@ __all__ = [
     "ScrapeWithActionsRequestActionsItemPosition",
     "ScrapeWithActionsRequestActionsItem",
     "ScrapeWithActionsRequestFormAutoFill",
+    "ScrapeWithActionsRequestBrowserOptionsProxyRotation",
     "ScrapeWithActionsRequestBrowserOptions",
     "ScrapeWithActionsRequestExtractionOptions",
     "ScrapeWithActionsRequestRedactPii",
@@ -105,6 +106,7 @@ class AgentRequest(_RequestModel):
     model: Optional[Literal["default", "pro"]] = Field(default="default", description="\"default\" = built-in planning loop. \"pro\" requires interactive confirmation and is rejected by the REST API \u2014 use the CrawlForge MCP server for pro runs.")
     maxSteps: Optional[float] = Field(default=5, description="Max fetch iterations (hard cap: 10)")
     maxUrls: Optional[float] = Field(default=10, description="Max URLs to fetch (hard cap: 20)")
+    max_inline_chars: Optional[float] = Field(default=40000, description="Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit).")
 
 
 class AnalyzeContentRequest(_RequestModel):
@@ -150,7 +152,7 @@ class BatchScrapeRequestExtractionTemplateFieldsItem(_RequestModel):
 
 class BatchScrapeRequestExtractionTemplate(_RequestModel):
     """Optional per-page field extraction"""
-    fields: Optional[List[BatchScrapeRequestExtractionTemplateFieldsItem]] = Field(default=None, description="Fields to extract from each page: { name, selector (CSS), attribute? }. Without attribute the element text is returned; xpath is not supported.")
+    fields: Optional[List[BatchScrapeRequestExtractionTemplateFieldsItem]] = Field(default=None, description="Fields to extract from each page: { name, selector (CSS), attribute? }. Without attribute the element text is returned, one line per block element; xpath is not supported.")
     capture_screenshots: Optional[bool] = Field(default=None)
     extract_links: Optional[bool] = Field(default=None)
     extract_images: Optional[bool] = Field(default=None)
@@ -220,6 +222,7 @@ class BrowserSessionRequest(_RequestModel):
     actions: Optional[List[BrowserSessionRequestActionsItem]] = Field(default=None, description="act: the actions to run against the open page, 1-20 of them, in the same shape scrape_with_actions takes \u2014 see that tool for every per-action field. Target an element by a @e ref from the most recent snapshot (for example \"@e2\") in selector, or by a CSS selector. Navigation invalidates refs, so snapshot again after one.")
     continue_on_error: Optional[bool] = Field(default=False, description="act: keep going past a failed action instead of stopping the call")
     formats: Optional[List[Any]] = Field(default=["markdown"], description="read: formats to return from the live DOM \u2014 markdown, html, text, json. The page is read as it stands after everything the session has done, cookies and all; nothing is re-fetched.")
+    onlyMainContent: Optional[bool] = Field(default=False, description="read: false (default) returns the whole page as markdown/text (markdown leaves out nav, footer and aside elements, as scrape's does; text leaves out nothing); true keeps only the main article block via Readability, which drops navigation and footers but can also drop list items on listing and app pages. The result's extractionMethod says which ran (\"full_page\" for the whole page).")
     full_page: Optional[bool] = Field(default=False, description="screenshot: capture the full scrollable page")
     format: Optional[Literal["png", "jpeg"]] = Field(default="png", description="screenshot: image format")
     quality: Optional[float] = Field(default=80, description="screenshot: JPEG quality (0-100)")
@@ -273,7 +276,7 @@ class ExtractContentRequest(_RequestModel):
     url: str = Field(description="The URL to extract content from")
     include_images: Optional[bool] = Field(default=True, description="Include images found in the content")
     include_links: Optional[bool] = Field(default=False, description="Include links found in the content")
-    clean_html: Optional[bool] = Field(default=True, description="Return clean text instead of HTML")
+    clean_html: Optional[bool] = Field(default=True, description="Return clean text instead of HTML: one line per block element (heading, paragraph, list item, table row)")
     extract_main_content: Optional[bool] = Field(default=True, description="Use readability algorithms to find main content")
     timeout: Optional[float] = Field(default=10000, ge=1000, le=30000, description="Request timeout in milliseconds (1000-30000)")
     respect_robots: Optional[bool] = Field(default=True)
@@ -287,7 +290,13 @@ class ExtractEmbeddedStateRequest(_RequestModel):
     user_agent: Optional[str] = Field(default=None, description="Override the User-Agent sent to the target")
     respect_robots: Optional[bool] = Field(default=True, description="Honour the target's robots.txt. Setting this to false is recorded against your API key.")
     timeout: Optional[int] = Field(default=20000, ge=1000, le=60000, description="Fetch timeout in ms (1000-60000)")
-    max_inline_chars: Optional[int] = Field(default=None, ge=1000, le=10000000, description="Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit).")
+    keys_only: Optional[bool] = Field(default=False, description="Return keys instead of data: the selected data (after path, if given) described two levels deep, each leaf labelled \"object\", \"array(<n>)\", \"string\", \"number\", \"boolean\" or \"null\", and an array as { length, first } with the shape of its first element. found and bytes are unchanged, so one cheap call shows which path to ask for.")
+    find: Optional[str] = Field(default=None, min_length=1, max_length=100, description="Return `matches` instead of `data`: every property with this key name (case-insensitive) anywhere in the selected data (after `path`), in document order, each as {path, preview} with the first 200 characters of its value - at most 50, with `matches_total` and `matches_truncated`. Each match path already starts with `path`, so it can be passed straight back as `path`. Discover where a field lives without downloading the payload. Cannot be combined with keys_only")
+    raw: Optional[bool] = Field(default=False, description="Also keep the undecoded __NUXT_DATA__ devalue array under json_scripts, beside the decoded nuxt_data. Default: false")
+    escalate: Optional[bool] = Field(default=False, description="Retry a blocked page in a stealth browser, in this same call. The plain fetch always runs first; only a bot wall, an empty shell with no state, or a 403, 429 or 444 escalates \u2014 never a 404 or a 5xx. The rendered HTML goes through the same parser. The response carries escalated: true|false whenever this is set, plus stealth: { engine, vendor_detected } when the render ran. It costs the escalation add-on only when it ran. The stage needs the CrawlForge execution backend: where that is not configured it returns 503 TOOL_NOT_AVAILABLE and charges nothing. robots.txt is respected on the escalated path too. Reading window globals (window_state) is MCP-server only: the render here returns HTML.")
+    escalate_engine: Optional[Literal["playwright", "camoufox"]] = Field(default="playwright", description="Browser engine for the escalated render (camoufox only where installed on the backend). Ignored when no escalation runs.")
+    wait_for: Optional[int] = Field(default=None, ge=0, le=30000, description="Extra wait after page load for the escalated render, in ms (0-30000), passed to stealth_mode for state that is written after DOMContentLoaded. Ignored when no escalation runs.")
+    max_inline_chars: Optional[int] = Field(default=None, ge=1000, le=10000000, description="Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit). Here the response keeps url, path, bytes, found, data_keys (the top-level keys of data) and escalated/stealth, and preview is the head of the pretty-printed JSON cut at a line boundary, so no value is ever split and the response stays within max_inline_chars; read_result json_path reads any field of the stored result, e.g. \"data.next_data.props\".")
 
 
 class ExtractLinksRequest(_RequestModel):
@@ -296,25 +305,30 @@ class ExtractLinksRequest(_RequestModel):
     base_url: Optional[str] = Field(default=None, description="Base URL for resolving relative links")
     filter_domains: Optional[List[str]] = Field(default=None, description="Only include links from specified domains")
     include_external: Optional[bool] = Field(default=True, description="Include external links")
-    include_internal: Optional[bool] = Field(default=True, description="Include internal links")
+    include_internal: Optional[bool] = Field(default=True, description="Include internal links (same hostname as the page)")
+    filter_external: Optional[bool] = Field(default=None, description="The MCP tool's name for outbound-only: true is the same as include_internal: false. An alias; when true it overrides include_internal.")
     include_anchors: Optional[bool] = Field(default=False, description="Include anchor links (#fragment)")
-    deduplicate: Optional[bool] = Field(default=True, description="Remove duplicate links")
-    include_metadata: Optional[bool] = Field(default=True, description="Include link metadata (title, domain, etc.)")
+    deduplicate: Optional[bool] = Field(default=True, description="Remove duplicate links, compared without fragment or trailing slash; the first occurrence is kept")
+    include_metadata: Optional[bool] = Field(default=True, description="Include each link's title and the domains count map. Every record always carries href, text, type, domain, rel and original_href \u2014 the shape the MCP tool returns. type is internal, external, anchor, other (mailto:, tel:, javascript: and other non-web schemes; href is null except for mailto: and tel:) or relative (html input with no base_url). A <base href> in the page is honoured unless base_url is given.")
     respect_robots: Optional[bool] = Field(default=True)
+    escalate: Optional[bool] = Field(default=False, description="Retry a walled page in a stealth browser, in this same call (url input only). The plain fetch always runs first; only a named bot wall, a 403, 429 or 444, or an empty shell or error placeholder served as 2xx escalates \u2014 never a 404, a 5xx, a binary or a host whose Retry-After window is still open. The response carries escalated: true|false whenever this is set, plus stealth: { engine, vendor_detected } when the render ran. It costs the escalation add-on only when it ran. The stage needs the CrawlForge execution backend: where that is not configured it returns 503 TOOL_NOT_AVAILABLE and charges nothing. robots.txt is respected on the escalated path too.")
+    escalate_engine: Optional[Literal["playwright", "camoufox"]] = Field(default="playwright", description="Browser engine for the escalated render (camoufox only where installed on the backend). Ignored when no escalation runs.")
+    max_inline_chars: Optional[int] = Field(default=None, ge=1000, le=10000000, description="Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit).")
 
 
 class ExtractMetadataRequest(_RequestModel):
     html: Optional[str] = Field(default=None, min_length=1, description="HTML content to extract metadata from")
-    url: Optional[str] = Field(default=None, description="URL to fetch and extract metadata from")
+    url: Optional[str] = Field(default=None, description="URL to fetch and extract metadata from. The response always carries redirected (true when the fetch ended on a different URL, compared after parsing, so https://example.com and https://example.com/ are the same page), and requested_url when it did; metadata.basic.url and extracted_from are the final URL")
     include_social: Optional[bool] = Field(default=True, description="Include Open Graph and Twitter Card metadata")
     include_seo: Optional[bool] = Field(default=True, description="Include SEO-related metadata")
     include_technical: Optional[bool] = Field(default=True, description="Include technical metadata (scripts, stylesheets, etc.)")
     include_structured_data: Optional[bool] = Field(default=True, description="Include structured data (JSON-LD, microdata)")
     respect_robots: Optional[bool] = Field(default=True)
+    max_inline_chars: Optional[int] = Field(default=None, ge=1000, le=10000000, description="Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit).")
 
 
 class ExtractStructuredRequestSchema(_RequestModel):
-    """JSON Schema defining the data structure to extract"""
+    """JSON Schema defining the data structure to extract. A number or integer property takes the first number in the text found ("4.5 out of 5" is 4.5; an integer only when whole); text with no number is returned as it is"""
     type: Optional[str] = Field(default=None)
     properties: Dict[str, Any] = Field()
     required: Optional[List[str]] = Field(default=None)
@@ -328,7 +342,7 @@ class ExtractStructuredRequestLlmConfig(_RequestModel):
 
 class ExtractStructuredRequest(_RequestModel):
     url: str = Field(description="The URL to extract structured data from")
-    schema_: ExtractStructuredRequestSchema = Field(alias="schema", description="JSON Schema defining the data structure to extract")
+    schema_: ExtractStructuredRequestSchema = Field(alias="schema", description="JSON Schema defining the data structure to extract. A number or integer property takes the first number in the text found (\"4.5 out of 5\" is 4.5; an integer only when whole); text with no number is returned as it is")
     prompt: Optional[str] = Field(default=None, description="Accepted for compatibility; only used by the MCP server LLM extraction")
     llmConfig: Optional[ExtractStructuredRequestLlmConfig] = Field(default=None, description="Accepted for compatibility; this endpoint never calls an LLM provider")
     selectorHints: Optional[Dict[str, str]] = Field(default=None, description="CSS selectors per schema property, checked before structured data")
@@ -346,11 +360,14 @@ class ExtractTextRequest(_RequestModel):
     html: Optional[str] = Field(default=None, min_length=1, description="HTML content to extract text from")
     url: Optional[str] = Field(default=None, description="URL to fetch and extract text from")
     selector: Optional[str] = Field(default=None, description="CSS selector to target specific elements")
-    clean: Optional[bool] = Field(default=True, description="Remove extra whitespace and formatting")
-    preserve_links: Optional[bool] = Field(default=False, description="Include links in the extracted text")
-    preserve_formatting: Optional[bool] = Field(default=False, description="Preserve basic HTML formatting")
-    max_length: Optional[float] = Field(default=None, ge=1, le=1000000, description="Maximum length of extracted text")
+    clean: Optional[bool] = Field(default=True, description="Collapse runs of spaces within a line and drop blank lines; line breaks between blocks are kept. Text mode only.")
+    preserve_links: Optional[bool] = Field(default=False, description="Append the links as \"text (href)\" lines after the text. REST only (the MCP tool has no such option); text mode only.")
+    preserve_formatting: Optional[bool] = Field(default=False, description="Keep paragraph and heading breaks from the HTML source. REST only (the MCP tool has no such option); text mode only.")
+    max_length: Optional[float] = Field(default=None, ge=1, le=1000000, description="Maximum length of the returned text or markdown; a cut text ends in \"...\" and data.truncated is true (data.truncated is always present, false when nothing was cut)")
+    output_format: Optional[Literal["text", "markdown"]] = Field(default="text", description="text (default): data.text, one line per block element. markdown: data.markdown, the selected elements (or the body) converted with Turndown, data tables as GFM pipe tables and image and link URLs absolute. Either way data carries output_format, word_count and char_count, named as the MCP tool names them; markdown is counted without its # * ` _ [ ] syntax.")
     respect_robots: Optional[bool] = Field(default=True)
+    escalate: Optional[bool] = Field(default=False, description="Retry a walled page in a stealth browser, in this same call (url input only). The plain fetch always runs first; only a named bot wall, a 403, 429 or 444, or an empty shell or error placeholder served as 2xx escalates \u2014 never a 404, a 5xx, a binary or a host whose Retry-After window is still open. The response carries escalated: true|false whenever this is set, plus stealth: { engine, vendor_detected } when the render ran. It costs the escalation add-on only when it ran. The stage needs the CrawlForge execution backend: where that is not configured it returns 503 TOOL_NOT_AVAILABLE and charges nothing. robots.txt is respected on the escalated path too.")
+    escalate_engine: Optional[Literal["playwright", "camoufox"]] = Field(default="playwright", description="Browser engine for the escalated render (camoufox only where installed on the backend). Ignored when no escalation runs.")
     redact_pii: Optional[Union[bool, ExtractTextRequestRedactPii]] = Field(default=None, description="Remove personal data from the text this call returns, before it is stored or sent back. true is shorthand for { mode: \"fast\" }: every entity, tagged. As an object: entities (any of EMAIL, PHONE, FINANCIAL, SECRET; omitted or empty means all four, and any other name is a 400 rather than a silent no-op), replace_style (\"tag\" \u2192 <EMAIL>, \"mask\" \u2192 [REDACTED], \"remove\" \u2192 nothing; default \"tag\") and mode (\"fast\", the default, is regex-only and costs no extra credits; \"model\" covers PERSON and LOCATION, needs an LLM and is rejected here \u2014 use the CrawlForge MCP server). The response carries redaction: { entities, count, mode } inside data, saying what was removed. Detection is deliberately conservative: a card number must pass Luhn and an IBAN mod-97, so a false positive cannot silently destroy real page content. URLs, queries and identifiers the response uses to name what was fetched are left intact, and counters derived from the text (content_length, word_count, character_count) describe the text as it was extracted, before redaction.")
 
 
@@ -401,6 +418,7 @@ class GenerateLlmsTxtRequest(_RequestModel):
     complianceLevel: Optional[Literal["basic", "standard", "strict"]] = Field(default="standard", description="Accepted for compatibility; content is derived from real site data, not canned policy text")
     analysisOptions: Optional[GenerateLlmsTxtRequestAnalysisOptions] = Field(default=None, description="Analysis options. maxPages is clamped to 30 and maxDepth to 2 on the hosted REST API (clamps are reported in clamps_applied). respectRobots skips pages disallowed by robots.txt; detectAPIs flags /api, /docs/api, openapi, and swagger links found in fetched HTML.")
     outputOptions: Optional[GenerateLlmsTxtRequestOutputOptions] = Field(default=None, description="Output customization: organizationName (overrides the site title), contactEmail, customGuidelines, customRestrictions")
+    max_inline_chars: Optional[int] = Field(default=None, ge=1000, le=10000000, description="Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit).")
 
 
 class GetBatchResultsRequest(_RequestModel):
@@ -415,8 +433,8 @@ class ListOllamaModelsRequest(_RequestModel):
 
 class LocalizationRequest(_RequestModel):
     url: str = Field(description="The URL to analyze for localization")
-    target_language: Optional[str] = Field(default=None, description="Target language code (e.g., \"en\", \"fr\", \"es\")")
-    target_country: Optional[str] = Field(default=None, description="Target country code (e.g., \"US\", \"FR\", \"JP\")")
+    target_language: Optional[str] = Field(default=None, description="Language you expect (e.g., \"en\", \"fr\", \"es\"). Sent as this request's Accept-Language and compared with the detected language and html lang")
+    target_country: Optional[str] = Field(default=None, description="Country you expect (e.g., \"US\", \"FR\", \"JP\"). Echoed back and sent as an X-Country-Code header on this request; it does not change where the request comes from")
     detect_language: Optional[bool] = Field(default=True, description="Detect the page language from its visible text. Returns an ISO 639-1 code, or \"und\" when the language cannot be determined.")
     extract_hreflang: Optional[bool] = Field(default=True, description="Extract hreflang alternate language tags")
     check_geo_targeting: Optional[bool] = Field(default=False, description="Check for geo-targeting metadata")
@@ -430,6 +448,7 @@ class MapSiteRequest(_RequestModel):
     max_depth: Optional[float] = Field(default=2, ge=1, le=5, description="Maximum crawl depth for the fallback crawl (1-5); unused when a sitemap is found")
     include_external: Optional[bool] = Field(default=False, description="Include external links in per-page link lists (crawl mode only; external pages are never crawled)")
     timeout: Optional[float] = Field(default=15000, ge=1000, le=30000, description="Overall crawl budget in milliseconds (1000-30000; capped at ~18000 to fit the serverless limit)")
+    max_inline_chars: Optional[int] = Field(default=None, ge=1000, le=10000000, description="Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit).")
 
 
 class ProcessDocumentRequestRedactPii(_RequestModel):
@@ -442,7 +461,7 @@ class ProcessDocumentRequest(_RequestModel):
     url: str = Field(description="URL of the document to process (max 25MB)")
     respect_robots: Optional[bool] = Field(default=True, description="Fetch the origin's robots.txt and refuse the document if it disallows CrawlForge. A missing or unreachable robots.txt is treated as no restrictions. Returns 403 ROBOTS_DISALLOWED, and no credits are charged.")
     document_type: Optional[Literal["pdf", "docx", "xlsx", "csv", "txt", "auto"]] = Field(default="auto", description="Document type; auto-detected from Content-Type, URL extension, then content sniffing")
-    extract_text: Optional[bool] = Field(default=True, description="Extract text content (capped at 200000 characters; PDFs read up to 200 pages)")
+    extract_text: Optional[bool] = Field(default=True, description="Extract text content (capped at 200000 characters; PDFs read up to 200 pages, and pages_read { start, end, count, total_pages } says which; HTML is read one line per block element)")
     extract_metadata: Optional[bool] = Field(default=True, description="Extract document metadata (PDF info dictionary; HTML title/description/author)")
     extract_tables: Optional[bool] = Field(default=False, description="Extract tables (PDF via ruled-grid detection, CSV via parsing; not available for HTML). Up to 20 tables of 1000 rows; a table ruled only horizontally keeps its rows but reports one column")
     extract_images: Optional[bool] = Field(default=False, description="Not available on the hosted REST API \u2014 returns images: null with a note; use the CrawlForge MCP server for image extraction")
@@ -496,7 +515,7 @@ class ScrapeRequestRedactPii(_RequestModel):
 
 class ScrapeRequest(_RequestModel):
     url: str = Field(description="The URL to scrape")
-    formats: Optional[List[Union[Literal["markdown", "html", "rawHtml", "text", "links", "metadata", "screenshot", "json-schema"], ScrapeRequestFormatsItemHighlights, ScrapeRequestFormatsItemQuestion]]] = Field(default=cast('List[Union[Literal["markdown", "html", "rawHtml", "text", "links", "metadata", "screenshot", "json-schema"], ScrapeRequestFormatsItemHighlights, ScrapeRequestFormatsItemQuestion]]', ["markdown"]), min_length=1, description="Output formats: markdown, html, rawHtml, text, links, metadata, plus two query-scoped object formats. { type: 'highlights', query, max_highlights (1-50, default 10), mode } returns the sentences and code blocks matching the query, verbatim, each with an offset and length into the markdown format of the same call (table rows too on the MCP server; this API flattens tables to text). { type: 'question', question, mode } returns an answer assembled from the best-matching passages, with its evidence. mode defaults to 'extractive'; mode 'model' needs an LLM and is rejected here, as are the 'screenshot' and 'json-schema' formats, which require the CrawlForge MCP server (browser/LLM).")
+    formats: Optional[List[Union[Literal["markdown", "html", "rawHtml", "text", "links", "metadata", "screenshot", "json-schema"], ScrapeRequestFormatsItemHighlights, ScrapeRequestFormatsItemQuestion]]] = Field(default=cast('List[Union[Literal["markdown", "html", "rawHtml", "text", "links", "metadata", "screenshot", "json-schema"], ScrapeRequestFormatsItemHighlights, ScrapeRequestFormatsItemQuestion]]', ["markdown"]), min_length=1, description="Output formats: markdown, html, rawHtml, text, links, metadata, plus two query-scoped object formats. { type: 'highlights', query, max_highlights (1-50, default 10), mode } returns the sentences and code blocks matching the query, verbatim, each with an offset and length into the markdown format of the same call (table rows too: markdown keeps data tables as GFM pipe tables). { type: 'question', question, mode } returns an answer assembled from the best-matching passages, with its evidence. At most one of each per request. mode defaults to 'extractive'; mode 'model' needs an LLM and is rejected here, as are the 'screenshot' and 'json-schema' formats, which require the CrawlForge MCP server (browser/LLM).")
     onlyMainContent: Optional[bool] = Field(default=True, description="Strip navigation, headers, and footers, returning only the main content")
     respect_robots: Optional[bool] = Field(default=True)
     escalate: Optional[bool] = Field(default=False, description="Retry a blocked page in a stealth browser, in this same call. The plain fetch always runs first; only if it meets a bot wall, an empty shell or an error placeholder does the stealth render run, and the requested formats are then derived from the rendered HTML. The response carries escalated: true|false whenever this is set, plus stealth: { engine, vendor_detected } when the render ran. It costs the escalation add-on only when it ran. The stage needs the CrawlForge execution backend: where that is not configured it returns 503 TOOL_NOT_AVAILABLE and charges nothing. robots.txt is respected on the escalated path too, matched against the same CrawlForge product token.")
@@ -523,6 +542,7 @@ class ScrapeTemplateRequest(_RequestModel):
     params: Optional[Dict[str, Any]] = Field(default=None, description="Drives a list connector in place of a url \u2014 { \"company\": \"stripe\" } for the job boards, { \"store\": \"www.allbirds.com\", \"collection\": \"mens\" } for shopify-collection, { \"vin\": \"5UXWX7C5*BA\" } for nhtsa-vin. Each connector names its own parameters in the description that template \"list\" returns. A missing or invalid parameter is a 400 naming it, and no credits are charged.")
     respect_robots: Optional[bool] = Field(default=True, description="Fetch the origin's robots.txt and refuse the URL if it disallows CrawlForge. Checked against the URL actually fetched, which is the API endpoint rather than the URL or params you pass wherever a template resolves one. A missing or unreachable robots.txt is treated as no restrictions. Returns 403 ROBOTS_DISALLOWED, and no credits are charged.")
     timeout: Optional[int] = Field(default=15000, ge=5000, le=60000, description="Request timeout in milliseconds (5000\u201360000).")
+    max_inline_chars: Optional[int] = Field(default=None, ge=1000, le=10000000, description="Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit).")
 
 
 class ScrapeWithActionsRequestActionsItemPosition(_RequestModel):
@@ -532,13 +552,13 @@ class ScrapeWithActionsRequestActionsItemPosition(_RequestModel):
 
 
 class ScrapeWithActionsRequestActionsItem(_RequestModel):
-    type: Optional[Literal["wait", "click", "type", "press", "scroll", "screenshot", "executeJavaScript", "select", "hover", "navigate", "snapshot"]] = Field(default=None, description="Action to perform")
+    type: Optional[Literal["wait", "click", "type", "press", "scroll", "screenshot", "executeJavaScript", "select", "hover", "navigate", "snapshot"]] = Field(default=None, description="Action to perform. executeJavaScript is disabled unless the server runs with ALLOW_JAVASCRIPT_EXECUTION=true; it is refused on the hosted API.")
     selector: Optional[str] = Field(default=None, description="What the action targets: either a CSS selector or an @e ref (for example @e1) taken from the most recent snapshot action in the same chain. Refs are invalidated by navigation \u2014 snapshot again after the page changes.")
     text: Optional[str] = Field(default=None, description="type: text to enter")
     key: Optional[str] = Field(default=None, description="press: key to press")
     value: Optional[str] = Field(default=None, description="select: one option to choose in the <select> named by selector. Matches an option by its value or by its visible label.")
     values: Optional[List[Any]] = Field(default=None, description="select: several options to choose, same matching rule as value. Supply value or values, not neither.")
-    url: Optional[str] = Field(default=None, description="navigate: URL to load mid-chain, in the same browser session. Passes the same robots.txt and SSRF checks as the top-level url.")
+    url: Optional[str] = Field(default=None, description="navigate: URL to load mid-chain, in the same browser session. Passes the same robots.txt and SSRF checks as the top-level url. Every navigation is checked for a bot wall, HTTP error page or challenge interstitial (an HTTP 202 interstitial included): this action's result carries httpStatus and, when a wall was named, blocked: { vendor, evidence } \u2014 reported, not failed. The result lists every navigation in order in navigations[] (index 0 the initial load), each { url, finalUrl, httpStatus, blocked? }, httpStatus null when unknown. A click or form submit that loads another page is a navigation too: it gets its own navigations entry with trigger naming the action type, and the top-level finalUrl is where the chain ended (url stays the one requested). A chain that ends on a wall is never reported as success: it fails (over REST, a 502 TOOL_ERROR with nothing charged).")
     waitUntil: Optional[Literal["load", "domcontentloaded", "networkidle", "commit"]] = Field(default="domcontentloaded", description="navigate: how long to wait for the new page before continuing")
     script: Optional[str] = Field(default=None, description="executeJavaScript: script to run")
     timeout: Optional[float] = Field(default=10000, description="Per-action timeout in ms, distinct from browserOptions.timeout which budgets the whole chain")
@@ -572,9 +592,16 @@ class ScrapeWithActionsRequestActionsItem(_RequestModel):
 
 class ScrapeWithActionsRequestFormAutoFill(_RequestModel):
     """Form auto-fill configuration"""
-    fields: Optional[List[Any]] = Field(default=None, description="Fields to fill: { selector, value, type: text|select|checkbox|radio|file, waitAfter }")
+    fields: Optional[List[Any]] = Field(default=None, description="Fields to fill: { selector, value, type: text|select|checkbox|radio|file, waitAfter }. type picks how the field is filled: text (default) types the value, select picks the option by value or label, checkbox/radio check the input (a selector matching a group checks the member whose value attribute equals value; a checkbox with value \"false\" is unchecked). file is not supported and fails that action")
     submitSelector: Optional[str] = Field(default=None, description="Selector of the submit control")
     waitAfterSubmit: Optional[float] = Field(default=2000, description="Wait after submit in ms (0-30000)")
+
+
+class ScrapeWithActionsRequestBrowserOptionsProxyRotation(_RequestModel):
+    """Route the stealth browser through proxies you supply. Requires stealth: true (refused otherwise). Chromium engine only: refused on Camoufox, which applies its proxy at browser launch and shares that browser across calls. CrawlForge supplies no proxies; a residential proxy is what gets past an IP-reputation block that no fingerprint fixes. Proxies on loopback, private, link-local or metadata addresses are refused. Credentials are never echoed back: metadata.browserOptions shows them redacted."""
+    enabled: Optional[bool] = Field(default=False, description="Route the chain through proxies")
+    proxies: Optional[List[str]] = Field(default=None, description="Proxy URLs: \"http://user:pass@host:port\" (percent-encode a password containing @ : or /), or bare \"host:port\" for an unauthenticated HTTP proxy. http, https, socks4 and socks5 are accepted.")
+    rotationInterval: Optional[float] = Field(default=300000, description="Minimum ms on one proxy before the list advances")
 
 
 class ScrapeWithActionsRequestBrowserOptions(_RequestModel):
@@ -585,6 +612,8 @@ class ScrapeWithActionsRequestBrowserOptions(_RequestModel):
     viewportHeight: Optional[float] = Field(default=720, description="600-1080")
     timeout: Optional[float] = Field(default=30000, description="Browser timeout in ms (10000-120000)")
     stealth: Optional[bool] = Field(default=False, description="Run the action chain in the stealth Chromium engine at its medium profile instead of the standard browser pool. The boolean is the only knob \u2014 level, fingerprint randomization and engine are not settable from here. Slower to start; it renders JavaScript, it does not solve challenges.")
+    consent: Optional[Literal["off", "reject", "accept"]] = Field(default="off", description="Cookie/consent banner handling. \"reject\" runs an opt-out on a recognised consent banner (DuckDuckGo autoconsent rules) once after the initial navigation and after each navigate action, capped at 2 s; \"accept\" opts in instead. When not \"off\" the result carries consent: { cmp, action, ms } for the initial navigation, and each navigate action's result carries its own result.consent. cmp is the consent platform matched, or null when none was; action is optOut, optIn, hide (a cosmetic rule hid the banner), timeout (a banner was detected but not answered within 2 s), error, or none (nothing matched). No match never fails the chain. Default \"off\", so a chain that clicks the banner itself keeps working.")
+    proxyRotation: Optional[ScrapeWithActionsRequestBrowserOptionsProxyRotation] = Field(default=None, description="Route the stealth browser through proxies you supply. Requires stealth: true (refused otherwise). Chromium engine only: refused on Camoufox, which applies its proxy at browser launch and shares that browser across calls. CrawlForge supplies no proxies; a residential proxy is what gets past an IP-reputation block that no fingerprint fixes. Proxies on loopback, private, link-local or metadata addresses are refused. Credentials are never echoed back: metadata.browserOptions shows them redacted.")
 
 
 class ScrapeWithActionsRequestExtractionOptions(_RequestModel):
@@ -603,16 +632,15 @@ class ScrapeWithActionsRequestRedactPii(_RequestModel):
 
 class ScrapeWithActionsRequest(_RequestModel):
     url: str = Field(description="The URL to scrape")
-    actions: List[ScrapeWithActionsRequestActionsItem] = Field(description="Browser actions to perform before scraping (1-20). A snapshot action first lists the interactive elements on the page as @e refs, which later actions can target in place of CSS selectors.")
-    formats: Optional[List[Any]] = Field(default=["json"], description="Output formats: markdown, html, json, text, screenshots")
-    captureIntermediateStates: Optional[bool] = Field(default=False, description="Capture page state after each action")
-    captureScreenshots: Optional[bool] = Field(default=True, description="Take screenshots during action execution")
+    actions: List[ScrapeWithActionsRequestActionsItem] = Field(description="Browser actions to perform before scraping (1-20). A snapshot action first lists the interactive elements on the page, including those inside open shadow roots and iframes, as @e refs (@e1, @e2, \u2026 in document order), which later actions can target in place of CSS selectors.")
+    formats: Optional[List[Any]] = Field(default=["json"], description="Output formats for scraped content: markdown, html, json, text. For an image, add a {type:\"screenshot\"} action where you want it taken.")
+    captureIntermediateStates: Optional[bool] = Field(default=False, description="Capture page state after each action: intermediateStates[] gets one entry per action (capturePoint is the action's 1-based position) with the url, title and the requested formats at that point")
     formAutoFill: Optional[ScrapeWithActionsRequestFormAutoFill] = Field(default=None, description="Form auto-fill configuration")
     browserOptions: Optional[ScrapeWithActionsRequestBrowserOptions] = Field(default=None, description="Browser configuration options")
     respect_robots: Optional[bool] = Field(default=True, description="Respect the target site's robots.txt. Omitted, the compliant default (true) applies: a URL disallowed for CrawlForge is refused before the browser opens and no credits are charged, and every navigate action is checked the same way. Setting this to false is honoured, returns a warning in the response, and is recorded against your API key.")
     extractionOptions: Optional[ScrapeWithActionsRequestExtractionOptions] = Field(default=None, description="Content extraction options")
     continueOnActionError: Optional[bool] = Field(default=False, description="Continue executing actions if one fails")
-    maxRetries: Optional[float] = Field(default=1, description="Maximum retry attempts on failure (0-3)")
+    maxRetries: Optional[float] = Field(default=0, description="Whole-chain retries on failure (0-3). A retry re-navigates to the starting URL and replays every action; each attempt is reported under attempts[]")
     screenshotOnError: Optional[bool] = Field(default=True, description="Capture screenshot when an error occurs")
     max_inline_chars: Optional[float] = Field(default=40000, description="Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit).")
     redact_pii: Optional[Union[bool, ScrapeWithActionsRequestRedactPii]] = Field(default=False, description="Remove personal data from the text this call returns, before it is stored or sent back. true is shorthand for { mode: \"fast\" }: every entity, tagged. As an object: entities (any of EMAIL, PHONE, FINANCIAL, SECRET; omitted or empty means all four, and any other name is a 400 rather than a silent no-op), replace_style (\"tag\" \u2192 <EMAIL>, \"mask\" \u2192 [REDACTED], \"remove\" \u2192 nothing; default \"tag\") and mode (\"fast\", the default, is regex-only and costs no extra credits; \"model\" covers PERSON and LOCATION, needs an LLM and is rejected here \u2014 use the CrawlForge MCP server). The response carries redaction: { entities, count, mode } inside data, saying what was removed. Detection is deliberately conservative: a card number must pass Luhn and an IBAN mod-97, so a false positive cannot silently destroy real page content. URLs, queries and identifiers the response uses to name what was fetched are left intact, and counters derived from the text (content_length, word_count, character_count) describe the text as it was extracted, before redaction.")
@@ -635,12 +663,13 @@ class SearchWebRequest(_RequestModel):
     time_range: Optional[Literal["day", "week", "month", "year", "all"]] = Field(default=None, description="Time range: day, week, month, year, all")
     file_type: Optional[str] = Field(default=None, description="Filter by file type (e.g., \"pdf\")")
     redact_pii: Optional[Union[bool, SearchWebRequestRedactPii]] = Field(default=None, description="Remove personal data from the text this call returns, before it is stored or sent back. true is shorthand for { mode: \"fast\" }: every entity, tagged. As an object: entities (any of EMAIL, PHONE, FINANCIAL, SECRET; omitted or empty means all four, and any other name is a 400 rather than a silent no-op), replace_style (\"tag\" \u2192 <EMAIL>, \"mask\" \u2192 [REDACTED], \"remove\" \u2192 nothing; default \"tag\") and mode (\"fast\", the default, is regex-only and costs no extra credits; \"model\" covers PERSON and LOCATION, needs an LLM and is rejected here \u2014 use the CrawlForge MCP server). The response carries redaction: { entities, count, mode } inside data, saying what was removed. Detection is deliberately conservative: a card number must pass Luhn and an IBAN mod-97, so a false positive cannot silently destroy real page content. URLs, queries and identifiers the response uses to name what was fetched are left intact, and counters derived from the text (content_length, word_count, character_count) describe the text as it was extracted, before redaction.")
+    max_inline_chars: Optional[int] = Field(default=None, ge=1000, le=10000000, description="Largest result returned inline, in characters of its JSON (1000-10000000; env CRAWLFORGE_MAX_INLINE_CHARS sets the default). Over it, the result is stored for 1 hour and the response carries a preview, a result_handle, total_chars and truncated: true; read the rest with read_result (1 credit).")
 
 
 class SerpRankRequest(_RequestModel):
     keyword: str = Field(min_length=1, description="The search query to check ranking for")
-    target: str = Field(min_length=1, description="Domain or URL to locate in the results (e.g. 'example.com')")
-    depth: Optional[float] = Field(default=100, ge=10, le=200, description="How many results to scan (10-200; 100 = 1 page of cost)")
+    target: str = Field(min_length=1, description="Domain or URL to locate in the results (e.g. 'example.com'). Matched by host, not exact URL: a URL is reduced to its host, and any page on that host or its subdomains counts")
+    depth: Optional[float] = Field(default=30, ge=10, le=200, description="How many results to scan (10-200, default 30); deeper scans take longer. Credits stay at 5 at any depth")
     device: Optional[Literal["desktop", "mobile"]] = Field(default="desktop", description="Device to emulate: desktop or mobile")
     language_code: Optional[str] = Field(default="en", description="Language code (e.g. 'en')")
     location_name: Optional[str] = Field(default="United States", description="Location, e.g. 'United States' or 'London,England,United Kingdom'")
@@ -648,7 +677,7 @@ class SerpRankRequest(_RequestModel):
 
 
 class StealthModeRequestStealthConfig(_RequestModel):
-    """Stealth browser configuration"""
+    """Stealth browser configuration. Applies to the call it is passed on and is not remembered. Chromium applies customUserAgent, customViewport, locale and timezone per call. On camoufox customUserAgent and customViewport are not applied, locale is fixed when the browser launches, and behind a proxy locale and timezone come from the exit IP; each of these is reported in `warnings`."""
     level: Optional[Literal["basic", "medium", "advanced"]] = Field(default="medium")
     randomizeFingerprint: Optional[bool] = Field(default=True)
     hideWebDriver: Optional[bool] = Field(default=True)
@@ -666,11 +695,11 @@ class StealthModeRequestRedactPii(_RequestModel):
 
 
 class StealthModeRequest(_RequestModel):
-    operation: Optional[Literal["scrape", "configure", "enable", "disable", "create_context", "create_page", "get_stats", "cleanup"]] = Field(default="configure", description="Stealth operation to perform. \"scrape\" creates a context, navigates to url, returns the requested formats and tears the context down, all in one billed call.")
-    stealthConfig: Optional[StealthModeRequestStealthConfig] = Field(default=None, description="Stealth browser configuration")
+    operation: Optional[Literal["scrape", "configure", "create_context", "create_page", "get_stats", "cleanup"]] = Field(default="configure", description="Stealth operation to perform. \"scrape\" creates a context, navigates to url, returns the requested formats and tears the context down, all in one billed call. \"configure\" validates stealthConfig and returns it with defaults filled in; nothing is stored. \"create_context\": a stealth context to run create_page in. \"create_page\": navigate urlToTest in that context and report status, title and any challenge page; the page is closed before the call returns. \"get_stats\": the backend's open contexts, browser and proxy state. \"cleanup\": close the browser and every context.")
+    stealthConfig: Optional[StealthModeRequestStealthConfig] = Field(default=None, description="Stealth browser configuration. Applies to the call it is passed on and is not remembered. Chromium applies customUserAgent, customViewport, locale and timezone per call. On camoufox customUserAgent and customViewport are not applied, locale is fixed when the browser launches, and behind a proxy locale and timezone come from the exit IP; each of these is reported in `warnings`.")
     engine: Optional[Literal["playwright", "camoufox"]] = Field(default="playwright", description="Browser engine (camoufox only where installed on the backend)")
     contextId: Optional[str] = Field(default=None, description="Browser context ID for page operations (from a create_context call)")
-    urlToTest: Optional[str] = Field(default=None, description="URL to navigate to when creating a page")
+    urlToTest: Optional[str] = Field(default=None, description="create_page: the URL to navigate to and check")
     url: Optional[str] = Field(default=None, description="URL to scrape. Required for operation \"scrape\"; the other operations use urlToTest instead.")
     formats: Optional[List[Any]] = Field(default=["markdown"], description="Formats operation \"scrape\" returns: markdown, html, text, links, metadata, screenshot. A screenshot comes back as a crawlforge://screenshot/{id} resource URI, not inline base64 \u2014 this endpoint passes that URI through without resolving it, so for now screenshot is usable only from the CrawlForge MCP server.")
     wait_for: Optional[float] = Field(default=None, description="Extra wait after page load, in ms (0-30000), for content that renders after DOMContentLoaded")
