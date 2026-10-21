@@ -618,7 +618,7 @@ class ScrapeWithActionsRequestBrowserOptions(_RequestModel):
 
 class ScrapeWithActionsRequestExtractionOptions(_RequestModel):
     """Content extraction options"""
-    selectors: Optional[Dict[str, str]] = Field(default=None, description="Key-value pairs of data to extract using CSS selectors")
+    selectors: Optional[Dict[str, str]] = Field(default=None, description="Key-value pairs of data to extract using CSS selectors. Append @attr to a selector to read an attribute instead of the text (\"a.next@href\"); @value on an input, textarea or select reads what it holds after the actions (typed or selected), and any other @attr reads the attribute as written in the page's HTML.")
     includeMetadata: Optional[bool] = Field(default=True)
     includeLinks: Optional[bool] = Field(default=True)
     includeImages: Optional[bool] = Field(default=True)
